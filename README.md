@@ -14,3 +14,6 @@ Crude arduino sketch to run one power module in the gen2 charger. Runs on an ard
 
 
 01/11/17 : Uploaded design files for Version 1 open source logic board for the Tesla Gen 2 charger. As of this date this design is totally unchecked and untested. Do not build this. It could blow up your house , car or cat. Based on the Arduino Due SAM3X8E microcontroller. Stay tuned.
+
+
+05/11/17 : Updated Design files and PCBs ordered for prototype builds.
