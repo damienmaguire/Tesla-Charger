@@ -17,3 +17,5 @@ Crude arduino sketch to run one power module in the gen2 charger. Runs on an ard
 
 
 05/11/17 : Updated Design files and PCBs ordered for prototype builds.
+
+17/11/17 : BOM uploaded for the V1 board.
