@@ -38,8 +38,9 @@ uint16_t currampt = 500; //500ms ramptime as default
 signed long curramp = 0;
 int  setting = 1;
 int incomingByte = 0;
-int state =0;
+int state,enab =0;
 unsigned long tlast =0;
+
 
 
 //*********Feedback from charge VARIABLE   DATA ******************
@@ -198,6 +199,15 @@ void loop() {
           setting = 1;
          }
         break;
+
+       case 101://e for enabling chargers followed by numbers to indicate which ones to run
+         if (Serial.available() > 0)
+         {
+          enab = Serial.parseInt();
+          setting = 1;
+         }
+        break;
+        
       case 99: //c for current setting in whole numbers
          if (Serial.available() > 0)
          {
@@ -225,6 +235,8 @@ void loop() {
     {
       Serial.print("Charger Off   ");
     }
+    Serial.print("Enabled Phases : ");
+    Serial.print(enab);    
     Serial.print("Set voltage : ");
     Serial.print(voltset*0.01,0);  
     Serial.print("V | Set current : ");
@@ -256,9 +268,47 @@ switch (state)
       break;
   
     case 1://Charger on
-    digitalWrite(62, HIGH); //chargeph1 activate
-    digitalWrite(63, HIGH); //chargeph2 activate
-    digitalWrite(64, HIGH); //chargeph3 activate
+    switch(enab)
+    {
+       case 1:
+        digitalWrite(62, HIGH);       
+       break;
+       
+       case 2:
+        digitalWrite(63, HIGH);       
+       break;
+       
+       case 3:
+        digitalWrite(64, HIGH);       
+       break;
+
+       case 12:
+        digitalWrite(62, HIGH);
+        digitalWrite(63, HIGH);      
+       break;
+       
+       case 13:
+        digitalWrite(62, HIGH);
+        digitalWrite(64, HIGH);       
+       break;
+       
+       case 123:
+        digitalWrite(62, HIGH);
+        digitalWrite(63, HIGH);
+        digitalWrite(64, HIGH);       
+       break;
+
+       case 23:
+        digitalWrite(63, HIGH);
+        digitalWrite(64, HIGH);       
+       break;
+
+      default: 
+      // if nothing else matches, do the default
+      // default is optional
+        break; 
+    }
+
     delay(10);
        test52=0x14;
        test53=0x2E;
@@ -415,4 +465,3 @@ void Charger_msgs()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }
-
