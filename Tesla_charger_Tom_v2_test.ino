@@ -163,13 +163,16 @@ digitalWrite(5, HIGH);//enable phase 3 power module
 
 void loop() {
   // put your main code here, to run repeatedly:
-  /*
+ 
+ //You need to decode in order to read the can bus.
   if (Can0.available()) 
   {
     Can0.read(incoming); 
     candecode(incoming);
-  } 
-*/
+  }
+ 
+ 
+ 
  if (Serial.available() > 0)
   {
     incomingByte = Serial.read(); // read the incoming byte:
