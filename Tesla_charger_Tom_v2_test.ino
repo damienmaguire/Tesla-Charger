@@ -29,7 +29,7 @@ template<class T> inline Print &operator <<(Print &obj, T arg) { obj.print(arg);
 
 
 //*********GENERAL VARIABLE   DATA ******************
-int debug = 1; // 1 = show canbus feedback
+int debug = 0; // 1 = show canbus feedback
 
 uint16_t voltset = 0;
 uint16_t curset = 0;
