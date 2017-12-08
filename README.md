@@ -19,3 +19,6 @@ Crude arduino sketch to run one power module in the gen2 charger. Runs on an ard
 05/11/17 : Updated Design files and PCBs ordered for prototype builds.
 
 17/11/17 : BOM uploaded for the V1 board.
+
+
+08/12/17 : Added Tesla_charger_Tom_v2_test.ino source file. Should run all 3 phases with the V1 logic board. Untested.
