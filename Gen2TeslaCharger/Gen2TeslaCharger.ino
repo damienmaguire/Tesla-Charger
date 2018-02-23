@@ -40,11 +40,24 @@ int state;
 unsigned long tlast = 0;
 bool bChargerEnabled;
 
+//*********EVSE VARIABLE   DATA ******************
 byte Proximity = 0;
-//bms status values
+//proximity status values
 #define Unconnected 0 // 3.3V
 #define Buttonpress 1 // 2.3V
 #define Connected 2 // 1.35V
+
+uint32_t pilottimer = 0;
+uint16_t timehigh, duration,accurlim =0;
+int dutycycle = 0;
+
+//*********Single or Three Phase Config VARIABLE   DATA ******************
+byte Config = 0;
+//proximity status values
+#define Singlephase 0 // all parrallel on one phase
+#define Threephase 1 // one module per phase
+
+
 
 //*********Feedback from charge VARIABLE   DATA ******************
 uint16_t dcvolt[3] = {0, 0, 0};
@@ -61,6 +74,8 @@ void setup()
   Serial.begin(115200);  //Initialize our USB port which will always be redefined as SerialUSB to use the Native USB port tied directly to the SAM3X processor.
 
   Timer3.attachInterrupt(Charger_msgs).start(90000); // charger messages every 100ms
+
+  attachInterrupt(EVSE_PILOT, Pilotread , CHANGE);
 
   Wire.begin();
   EEPROM.read(0, parameters);
@@ -307,11 +322,15 @@ void loop()
         Serial.print(dccur[x] / 1000, 2);
         Serial.println();
       }
+      }
+    */
   }
-  */
-}
 
-evseread();
+  evseread();
+  if (Proximity == Connected)
+  {
+    ACcurrentlimit();
+  }
 
 }
 
@@ -449,6 +468,7 @@ void evseread()
 
   if (debug != 0)
   {
+    /*
     Serial.println();
     Serial.print(val);             // debug value
     Serial.print("Proximity Status : ");
@@ -465,7 +485,46 @@ void evseread()
         break;
 
     }
+    */
   }
+}
 
+void Pilotread()
+{
+  if (  digitalRead(EVSE_PILOT ) == HIGH)
+  {
+    duration = micros()-pilottimer;
+    pilottimer = micros();
+  }
+  else
+  {
+    timehigh = micros()-pilottimer;
+    dutycycle = timehigh*100/duration;
+  }
+  accurlim = dutycycle * 600; //ma
+    if (debug != 0)
+  {
+    /*
+    Serial.println();
+    Serial.print(millis());
+    Serial.print(" Pilot Signal : ");
+    Serial.print(dutycycle);
+    Serial.print(" Current : ");
+    Serial.print((accurlim/1000));  
+    */
+  }
+}
+
+void ACcurrentlimit()
+{
+  if (Config == Singlephase)
+  {
+    parameters.currReq = accurlim/3 // all module parallel, sharing AC input current
+  }
+  else
+  {
+    parameters.currReq = accurlim // one module per phase, EVSE current limit is per phase
+  }
+  
 }
 
