@@ -47,10 +47,10 @@ byte Proximity = 0;
 #define Buttonpress 1 // 2.3V
 #define Connected 2 // 1.35V
 
-uint32_t pilottimer = 0;
-uint16_t timehigh, duration = 0;
+volatile uint32_t pilottimer = 0;
+volatile uint16_t timehigh, duration = 0;
 volatile uint16_t accurlim = 0;
-int dutycycle = 0;
+volatile int dutycycle = 0;
 
 //*********Single or Three Phase Config VARIABLE   DATA ******************
 byte Config = 0;
@@ -331,14 +331,21 @@ void loop()
   evseread();
   if (Proximity == Connected)
   {
-    digitalWrite(EVSE_ACTIVATE, HIGH);
-    //ACcurrentlimit();
+    //digitalWrite(EVSE_ACTIVATE, HIGH);
     if (debug != 0)
     {
       Serial.println();
       Serial.print(millis());
       Serial.print(" AC limit : ");
       Serial.print(accurlim);
+      Serial.print("  ");
+      Serial.print(dutycycle);
+    }
+    ACcurrentlimit();
+    if (debug != 0)
+    {
+      Serial.print(" Phase limit : ");
+      Serial.print(parameters.currReq);
     }
   }
 
@@ -501,7 +508,12 @@ void evseread()
 
 void Pilotread()
 {
-  if (  digitalRead(EVSE_PILOT ) == HIGH)
+ Pilotcalc();
+}
+
+void Pilotcalc()
+{
+    if (  digitalRead(EVSE_PILOT ) == HIGH)
   {
     duration = micros() - pilottimer;
     pilottimer = micros();
@@ -512,19 +524,6 @@ void Pilotread()
     dutycycle = timehigh * 100 / duration;
   }
   accurlim = dutycycle * 600; //ma
-  /*
-  if (debug != 0)
-  {
-
-      Serial.println();
-      Serial.print(millis());
-      Serial.print(" Pilot Signal : ");
-      Serial.print(dutycycle);
-      Serial.print(" Current : ");
-      Serial.print((accurlim/1000));
-    
-  }
-  */
 }
 
 void ACcurrentlimit()
