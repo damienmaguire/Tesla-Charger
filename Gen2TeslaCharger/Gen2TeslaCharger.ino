@@ -48,7 +48,8 @@ byte Proximity = 0;
 #define Connected 2 // 1.35V
 
 uint32_t pilottimer = 0;
-uint16_t timehigh, duration,accurlim =0;
+uint16_t timehigh, duration = 0;
+volatile uint16_t accurlim = 0;
 int dutycycle = 0;
 
 //*********Single or Three Phase Config VARIABLE   DATA ******************
@@ -138,6 +139,7 @@ void setup()
   pinMode(DIG_OUT_2, OUTPUT); //OP2
   pinMode(DIG_OUT_3, OUTPUT); //OP2
   pinMode(DIG_OUT_4, OUTPUT); //OP3
+  pinMode(EVSE_ACTIVATE, OUTPUT); //pull Pilot to 6V
   ///////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -329,7 +331,15 @@ void loop()
   evseread();
   if (Proximity == Connected)
   {
-    ACcurrentlimit();
+    digitalWrite(EVSE_ACTIVATE, HIGH);
+    //ACcurrentlimit();
+    if (debug != 0)
+    {
+      Serial.println();
+      Serial.print(millis());
+      Serial.print(" AC limit : ");
+      Serial.print(accurlim);
+    }
   }
 
 }
@@ -469,11 +479,11 @@ void evseread()
   if (debug != 0)
   {
     /*
-    Serial.println();
-    Serial.print(val);             // debug value
-    Serial.print("Proximity Status : ");
-    switch (Proximity)
-    {
+      Serial.println();
+      Serial.print(val);             // debug value
+      Serial.print("Proximity Status : ");
+      switch (Proximity)
+      {
       case Unconnected:
         Serial.print("Unconnected");
         break;
@@ -484,7 +494,7 @@ void evseread()
         Serial.print("Connected");
         break;
 
-    }
+      }
     */
   }
 }
@@ -493,38 +503,40 @@ void Pilotread()
 {
   if (  digitalRead(EVSE_PILOT ) == HIGH)
   {
-    duration = micros()-pilottimer;
+    duration = micros() - pilottimer;
     pilottimer = micros();
   }
   else
   {
-    timehigh = micros()-pilottimer;
-    dutycycle = timehigh*100/duration;
+    timehigh = micros() - pilottimer;
+    dutycycle = timehigh * 100 / duration;
   }
   accurlim = dutycycle * 600; //ma
-    if (debug != 0)
+  /*
+  if (debug != 0)
   {
-    /*
-    Serial.println();
-    Serial.print(millis());
-    Serial.print(" Pilot Signal : ");
-    Serial.print(dutycycle);
-    Serial.print(" Current : ");
-    Serial.print((accurlim/1000));  
-    */
+
+      Serial.println();
+      Serial.print(millis());
+      Serial.print(" Pilot Signal : ");
+      Serial.print(dutycycle);
+      Serial.print(" Current : ");
+      Serial.print((accurlim/1000));
+    
   }
+  */
 }
 
 void ACcurrentlimit()
 {
   if (Config == Singlephase)
   {
-    parameters.currReq = accurlim/3 // all module parallel, sharing AC input current
+    parameters.currReq = accurlim / 3 ; // all module parallel, sharing AC input current
   }
   else
   {
-    parameters.currReq = accurlim // one module per phase, EVSE current limit is per phase
+    parameters.currReq = accurlim; // one module per phase, EVSE current limit is per phase
   }
-  
+
 }
 
