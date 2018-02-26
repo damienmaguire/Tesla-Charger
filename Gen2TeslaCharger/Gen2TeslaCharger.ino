@@ -54,9 +54,11 @@ volatile int dutycycle = 0;
 
 //*********Single or Three Phase Config VARIABLE   DATA ******************
 byte Config = 0;
+uint16_t modulelimcur = 0;
+
 //proximity status values
-#define Singlephase 0 // all parrallel on one phase
-#define Threephase 1 // one module per phase
+#define Singlephase 0 // all parrallel on one phase Type 1
+#define Threephase 1 // one module per phase Type 2
 
 
 
@@ -86,7 +88,7 @@ void setup()
     parameters.can0Speed = 500000;
     parameters.can1Speed = 500000;
     parameters.currRampTime = 500;
-    parameters.currReq = 0;
+    parameters.currReq = 0; //max input limit per module 1500 = 1A
     parameters.enabledChargers = 123;
     parameters.mainsRelay = 48;
     parameters.voltSet = 0;
@@ -169,6 +171,17 @@ void loop()
 
     switch (incomingByte)
     {
+      case 'a'://v for voltage setting in whole numbers
+        if (Serial.available() > 0)
+        {
+          parameters.autoEnableCharger = Serial.parseInt();
+          if (parameters.autoEnableCharger > 1)
+          {
+            parameters.autoEnableCharger = 0;
+          }
+          setting = 1;
+        }
+        break;
       case 'v'://v for voltage setting in whole numbers
         if (Serial.available() > 0)
         {
@@ -229,15 +242,24 @@ void loop()
     Serial.print("Set voltage : ");
     Serial.print(parameters.voltSet * 0.01f, 0);
     Serial.print("V | Set current : ");
-    Serial.print(curset * 0.00066666, 0);
+    Serial.print(parameters.currReq * 0.00066666, 0);
     Serial.print(" A ");
-    Serial.print("  ms | Set ramptime : ");
-    Serial.print(parameters.currRampTime);
+    //Serial.print("  ms | Set ramptime : ");
+    //Serial.print(parameters.currRampTime);
 
-    Serial.print(" Ramp current : ");
-    curramp = (curset - parameters.currReq) / 500;
+    //Serial.print(" Ramp current : ");
+    //curramp = (curset - parameters.currReq) / 500;
 
-    Serial.print(curramp);
+    //Serial.print(curramp);
+
+    if (parameters.autoEnableCharger == 1)
+    {
+      Serial.print(" Autostart On   ");
+    }
+    else
+    {
+      Serial.print(" Autostart Off   ");
+    }
     setting = 0;
   }
 
@@ -329,26 +351,36 @@ void loop()
   }
 
   evseread();
-  if (Proximity == Connected)
+  if (parameters.autoEnableCharger == 1)
   {
-    //digitalWrite(EVSE_ACTIVATE, HIGH);
-    if (debug != 0)
+    if (Proximity == Connected) //check if plugged in
     {
-      Serial.println();
-      Serial.print(millis());
-      Serial.print(" AC limit : ");
-      Serial.print(accurlim);
-      Serial.print("  ");
-      Serial.print(dutycycle);
+      digitalWrite(EVSE_ACTIVATE, LOW);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
+      if (debug != 0)
+      {
+        Serial.println();
+        Serial.print(millis());
+        Serial.print(" AC limit : ");
+        Serial.print(accurlim);
+        Serial.print("  ");
+        Serial.print(dutycycle);
+      }
+      ACcurrentlimit();
+      if (debug != 0)
+      {
+        Serial.print(" Phase limit : ");
+        Serial.print(modulelimcur * 0.00066666, 1);
+      }
+      if (modulelimcur > 1500) //above one amp active modules
+      {
+        state = 1;
+      }
     }
-    ACcurrentlimit();
-    if (debug != 0)
+    else // unplugged or buton pressed stop charging
     {
-      Serial.print(" Phase limit : ");
-      Serial.print(parameters.currReq);
+      state = 0;
     }
   }
-
 }
 
 
@@ -422,8 +454,8 @@ void Charger_msgs()
   outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
   outframe.rtr = 0;                 //No request
   outframe.data.bytes[0] = 0x42;
-  outframe.data.bytes[2] = lowByte(parameters.currReq); //Current setpoint
-  outframe.data.bytes[3] = highByte(parameters.currReq); //Current setpoint
+  outframe.data.bytes[2] = lowByte(modulelimcur); //Current setpoint
+  outframe.data.bytes[3] = highByte(modulelimcur); //Current setpoint
   if (bChargerEnabled)
   {
     outframe.data.bytes[1] = 0xBB;
@@ -508,12 +540,12 @@ void evseread()
 
 void Pilotread()
 {
- Pilotcalc();
+  Pilotcalc();
 }
 
 void Pilotcalc()
 {
-    if (  digitalRead(EVSE_PILOT ) == HIGH)
+  if (  digitalRead(EVSE_PILOT ) == HIGH)
   {
     duration = micros() - pilottimer;
     pilottimer = micros();
@@ -530,12 +562,15 @@ void ACcurrentlimit()
 {
   if (Config == Singlephase)
   {
-    parameters.currReq = accurlim / 3 ; // all module parallel, sharing AC input current
+    modulelimcur = (accurlim / 3) * 1.5 ; // all module parallel, sharing AC input current
   }
   else
   {
-    parameters.currReq = accurlim; // one module per phase, EVSE current limit is per phase
+    modulelimcur = accurlim * 1.5; // one module per phase, EVSE current limit is per phase
   }
-
+  if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
+  {
+    modulelimcur = parameters.currReq;
+  }
 }
 
