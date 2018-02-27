@@ -455,8 +455,8 @@ void Charger_msgs()
   outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
   outframe.rtr = 0;                 //No request
   outframe.data.bytes[0] = 0x42;
-  outframe.data.bytes[2] = lowByte(modulelimcur); //Current setpoint
-  outframe.data.bytes[3] = highByte(modulelimcur); //Current setpoint
+  outframe.data.bytes[2] = lowByte(modulelimcur); //AC Current setpoint
+  outframe.data.bytes[3] = highByte(modulelimcur); //AC Current setpoint
   if (bChargerEnabled)
   {
     outframe.data.bytes[1] = 0xBB;
