@@ -355,7 +355,7 @@ void loop()
   {
     if (Proximity == Connected) //check if plugged in
     {
-      digitalWrite(EVSE_ACTIVATE, LOW);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
+      digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
       if (debug != 0)
       {
         Serial.println();
@@ -379,6 +379,7 @@ void loop()
     else // unplugged or buton pressed stop charging
     {
       state = 0;
+      digitalWrite(EVSE_ACTIVATE, LOW);
     }
   }
 }
