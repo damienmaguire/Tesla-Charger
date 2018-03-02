@@ -30,7 +30,7 @@ template<class T> inline Print &operator <<(Print &obj, T arg) {
 }
 
 //*********GENERAL VARIABLE   DATA ******************
-int debug = 1; // 1 = show canbus feedback
+int debug = 1; // 1 = show Proximity status and Pilot current limmits
 
 uint16_t curset = 0;
 signed long curramp = 0;
@@ -42,7 +42,8 @@ bool bChargerEnabled;
 
 //*********EVSE VARIABLE   DATA ******************
 byte Proximity = 0;
-//proximity status values
+int Type = 2;
+//proximity status values for type 1
 #define Unconnected 0 // 3.3V
 #define Buttonpress 1 // 2.3V
 #define Connected 2 // 1.35V
@@ -51,6 +52,8 @@ volatile uint32_t pilottimer = 0;
 volatile uint16_t timehigh, duration = 0;
 volatile uint16_t accurlim = 0;
 volatile int dutycycle = 0;
+
+uint16_t cablelim = 0; // Type 2 cable current limit
 
 //*********Single or Three Phase Config VARIABLE   DATA ******************
 byte Config = 0;
@@ -499,31 +502,59 @@ void evseread()
 {
   uint16_t val = 0;
   val = analogRead(EVSE_PROX);     // read the input pin
-
-  if ( val > 800)
+  if ( Type == 2)
   {
-    Proximity = Unconnected;
-  }
-  else
-  {
-    if ( val > 550)
+    if ( val > 950)
     {
-      Proximity = Buttonpress;
+      Proximity = Unconnected;
     }
     else
     {
       Proximity = Connected;
+      if ( val < 950 && val > 800)
+      {
+        cablelim = 13000;
+      }
+      if ( val < 800 && val > 700)
+      {
+        cablelim = 20000;
+      }
+      if ( val < 600 && val > 450)
+      {
+        cablelim = 32000;
+      }
+      if ( val < 400 && val > 250)
+      {
+        cablelim = 63000;
+      }
     }
   }
 
+  if ( Type == 1)
+  {
+    if ( val > 800)
+    {
+      Proximity = Unconnected;
+    }
+    else
+    {
+      if ( val > 550)
+      {
+        Proximity = Buttonpress;
+      }
+      else
+      {
+        Proximity = Connected;
+      }
+    }
+  }
   if (debug != 0)
   {
-    /*
-      Serial.println();
-      Serial.print(val);             // debug value
-      Serial.print("Proximity Status : ");
-      switch (Proximity)
-      {
+    Serial.println();
+    Serial.print(val );
+    Serial.print("  Proximity Status : ");
+    switch (Proximity)
+    {
       case Unconnected:
         Serial.print("Unconnected");
         break;
@@ -534,8 +565,7 @@ void evseread()
         Serial.print("Connected");
         break;
 
-      }
-    */
+    }
   }
 }
 
@@ -553,14 +583,23 @@ void Pilotcalc()
   }
   else
   {
-    timehigh = micros() - pilottimer;
-    dutycycle = timehigh * 100 / duration;
+    accurlim = (micros() - pilottimer) * 100 / duration * 600; //Calculate the duty cycle then multiply by 600 to get mA current limit
   }
-  accurlim = dutycycle * 600; //ma
 }
 
 void ACcurrentlimit()
 {
+  if (micros() - pilottimer > 1200) //too big a gap in pilot signal kills means signal error or disconnected so no current allowed.
+  {
+    accurlim = 0;
+  }
+  if (Type == 2)
+  {
+    if (modulelimcur > cablelim)
+    {
+      modulelimcur = cablelim;
+    }
+  }
   if (Config == Singlephase)
   {
     modulelimcur = (accurlim / 3) * 1.5 ; // all module parallel, sharing AC input current
