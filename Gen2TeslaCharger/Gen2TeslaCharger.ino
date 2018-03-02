@@ -30,7 +30,9 @@ template<class T> inline Print &operator <<(Print &obj, T arg) {
 }
 
 //*********GENERAL VARIABLE   DATA ******************
-int debug = 1; // 1 = show Proximity status and Pilot current limmits
+int debugevse = 0; // 1 = show Proximity status and Pilot current limmits
+int debug = 1; // 1 = show phase module CAN feedback
+
 
 uint16_t curset = 0;
 signed long curramp = 0;
@@ -70,7 +72,9 @@ uint16_t dcvolt[3] = {0, 0, 0};
 uint16_t dccur[3] = {0, 0, 0};
 uint16_t acvolt[3] = {0, 0, 0};
 uint16_t accur[3] = {0, 0, 0};
-
+byte inlettarg [3] = {0, 0, 0};
+byte curtemplim [3] = {0, 0, 0};
+byte templeg[2][3] = {{0, 0, 0}, {0, 0, 0}};
 int newframe = 0;
 
 ChargerParams parameters;
@@ -330,27 +334,33 @@ void loop()
   */
   if (debug != 0)
   {
-    /*
-      if (newframe & 3 != 0)
-      {
+    if (newframe & 3 != 0)
+    {
       Serial.println();
       Serial.print(millis());
       for (int x = 0; x < 3; x++)
       {
         Serial.print("  Phase ");
         Serial.print(x + 1);
-        Serial.print(" Feebback //  AC voltage : ");
+        Serial.print(" Feebback //  AC volt: ");
         Serial.print(acvolt[x]);
-        Serial.print("  AC current : ");
+        Serial.print("  AC cur: ");
         Serial.print(accur[x] / 28);
-        Serial.print("  DC voltage : ");
+        Serial.print("  DC volt: ");
         Serial.print(dcvolt[x]);
-        Serial.print("  DC current : ");
+        Serial.print("  DC cur: ");
         Serial.print(dccur[x] / 1000, 2);
+        Serial.print("  Inlet Targ: ");
+        Serial.print(inlettarg[x]);
+        Serial.print("  Temp Lim Cur: ");
+        Serial.print(curtemplim[x]);
+        Serial.print("  ");
+        Serial.print(templeg[0][x]);
+        Serial.print("  ");
+        Serial.print(templeg[1][x]);
         Serial.println();
       }
-      }
-    */
+    }
   }
 
   evseread();
@@ -359,7 +369,7 @@ void loop()
     if (Proximity == Connected) //check if plugged in
     {
       digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
-      if (debug != 0)
+      if (debugevse != 0)
       {
         Serial.println();
         Serial.print(millis());
@@ -369,7 +379,7 @@ void loop()
         Serial.print(dutycycle);
       }
       ACcurrentlimit();
-      if (debug != 0)
+      if (debugevse != 0)
       {
         Serial.print(" Phase limit : ");
         Serial.print(modulelimcur * 0.00066666, 1);
@@ -392,6 +402,40 @@ void candecode(CAN_FRAME &frame)
 {
   switch (frame.id)
   {
+    case 0x24B: //phase 3 temp message 2
+      curtemplim[2] = frame.data.bytes[0] * 0.234375;
+      newframe = newframe | 1;
+      break;
+
+    case 0x23B: //phase 3 temp message 1
+      templeg[0][2] = frame.data.bytes[0] - 40;
+      templeg[1][2] = frame.data.bytes[1] - 40;
+      inlettarg[2] = frame.data.bytes[5] - 40;
+      newframe = newframe | 1;
+      break;
+
+    case 0x239: //phase 2 temp message 1
+      templeg[0][1] = frame.data.bytes[0] - 40;
+      templeg[1][1] = frame.data.bytes[1] - 40;
+      inlettarg[1] = frame.data.bytes[5] - 40;
+      newframe = newframe | 1;
+      break;
+    case 0x249: //phase 2 temp message 2
+      curtemplim[1] = frame.data.bytes[0] * 0.234375;
+      newframe = newframe | 1;
+      break;
+
+    case 0x237: //phase 1 temp message 1
+      templeg[0][0] = frame.data.bytes[0] - 40;
+      templeg[1][0] = frame.data.bytes[1] - 40;
+      inlettarg[0] = frame.data.bytes[5] - 40;
+      newframe = newframe | 1;
+      break;
+    case 0x247: //phase 2 temp message 2
+      curtemplim[0] = frame.data.bytes[0] * 0.234375;
+      newframe = newframe | 1;
+      break;
+
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
       accur[0] = ((frame.data.bytes[6] & 3) + (frame.data.bytes[5] & 01111111));
@@ -548,7 +592,7 @@ void evseread()
       }
     }
   }
-  if (debug != 0)
+  if (debugevse != 0)
   {
     Serial.println();
     Serial.print(val );
@@ -593,13 +637,6 @@ void ACcurrentlimit()
   {
     accurlim = 0;
   }
-  if (Type == 2)
-  {
-    if (modulelimcur > cablelim)
-    {
-      modulelimcur = cablelim;
-    }
-  }
   if (Config == Singlephase)
   {
     modulelimcur = (accurlim / 3) * 1.5 ; // all module parallel, sharing AC input current
@@ -611,6 +648,13 @@ void ACcurrentlimit()
   if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
   {
     modulelimcur = parameters.currReq;
+  }
+  if (Type == 2)
+  {
+    if (modulelimcur > cablelim)
+    {
+      modulelimcur = cablelim;
+    }
   }
 }
 
