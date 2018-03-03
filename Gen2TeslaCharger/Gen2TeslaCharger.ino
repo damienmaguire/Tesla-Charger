@@ -30,7 +30,7 @@ template<class T> inline Print &operator <<(Print &obj, T arg) {
 }
 
 //*********GENERAL VARIABLE   DATA ******************
-int debugevse = 0; // 1 = show Proximity status and Pilot current limmits
+int debugevse = 1; // 1 = show Proximity status and Pilot current limmits
 int debug = 1; // 1 = show phase module CAN feedback
 
 
@@ -58,14 +58,16 @@ volatile int dutycycle = 0;
 uint16_t cablelim = 0; // Type 2 cable current limit
 
 //*********Single or Three Phase Config VARIABLE   DATA ******************
-byte Config = 0;
+byte Config = 1;
 uint16_t modulelimcur = 0;
 
 //proximity status values
 #define Singlephase 0 // all parrallel on one phase Type 1
 #define Threephase 1 // one module per phase Type 2
 
+//*********Charer Control VARIABLE   DATA ******************
 
+bool Vlimmode = true; // Set charges to voltage limit mode
 
 //*********Feedback from charge VARIABLE   DATA ******************
 uint16_t dcvolt[3] = {0, 0, 0};
@@ -97,7 +99,7 @@ void setup()
     parameters.can1Speed = 500000;
     parameters.currRampTime = 500;
     parameters.currReq = 0; //max input limit per module 1500 = 1A
-    parameters.enabledChargers = 123;
+    parameters.enabledChargers = 3; // enable per phase - 123 is all phases - 3 is just phase 3
     parameters.mainsRelay = 48;
     parameters.voltSet = 0;
     parameters.autoEnableCharger = 0; //don't auto enable it by default
@@ -324,36 +326,65 @@ void loop()
       break;
   }
 
-  if (debug != 0)
+  if (tlast <  (millis() - 500))
   {
-    if (newframe & 3 != 0)
+    tlast = millis();
+    if (debug != 0)
     {
-      Serial.println();
-      Serial.print(millis());
-      for (int x = 0; x < 3; x++)
+      if (newframe & 3 != 0)
       {
-        Serial.print("  Phase ");
-        Serial.print(x + 1);
-        Serial.print(" Feebback //  AC present: ");
-        Serial.print(ACpres[x]);
-        Serial.print("  AC volt: ");
-        Serial.print(acvolt[x]);
-        Serial.print("  AC cur: ");
-        Serial.print(accur[x] / 28);
-        Serial.print("  DC volt: ");
-        Serial.print(dcvolt[x]);
-        Serial.print("  DC cur: ");
-        Serial.print(dccur[x] / 1000, 2);
-        Serial.print("  Inlet Targ: ");
-        Serial.print(inlettarg[x]);
-        Serial.print("  Temp Lim Cur: ");
-        Serial.print(curtemplim[x]);
-        Serial.print("  ");
-        Serial.print(templeg[0][x]);
-        Serial.print("  ");
-        Serial.print(templeg[1][x]);
         Serial.println();
+        Serial.println(millis());
+        for (int x = 0; x < 3; x++)
+        {
+          Serial.print("  Phase ");
+          Serial.print(x + 1);
+          Serial.print(" Feebback //  AC present: ");
+          Serial.print(ACpres[x]);
+          Serial.print("  AC volt: ");
+          Serial.print(acvolt[x]);
+          Serial.print("  AC cur: ");
+          Serial.print(accur[x] / 28);
+          Serial.print("  DC volt: ");
+          Serial.print(dcvolt[x]);
+          Serial.print("  DC cur: ");
+          Serial.print(dccur[x] / 1000, 2);
+          Serial.print("  Inlet Targ: ");
+          Serial.print(inlettarg[x]);
+          Serial.print("  Temp Lim Cur: ");
+          Serial.print(curtemplim[x]);
+          Serial.print("  ");
+          Serial.print(templeg[0][x]);
+          Serial.print("  ");
+          Serial.print(templeg[1][x]);
+          Serial.println();
+        }
       }
+    }
+    if (debugevse != 0)
+    {
+      Serial.print("  Proximity Status : ");
+      switch (Proximity)
+      {
+        case Unconnected:
+          Serial.print("Unconnected");
+          break;
+        case Buttonpress:
+          Serial.print("Button Pressed");
+          break;
+        case Connected:
+          Serial.print("Connected");
+          break;
+
+      }
+      Serial.print(" AC limit : ");
+      Serial.print(accurlim);
+      Serial.print(" Cable Limit: ");
+      Serial.print(cablelim);
+      Serial.print(" Module Cur Request: ");
+      Serial.print(modulelimcur/1.5);
+
+
     }
   }
 
@@ -363,21 +394,8 @@ void loop()
     if (Proximity == Connected) //check if plugged in
     {
       digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
-      if (debugevse != 0)
-      {
-        Serial.println();
-        Serial.print(millis());
-        Serial.print(" AC limit : ");
-        Serial.print(accurlim);
-        Serial.print("  ");
-        Serial.print(dutycycle);
-      }
+
       ACcurrentlimit();
-      if (debugevse != 0)
-      {
-        Serial.print(" Phase limit : ");
-        Serial.print(modulelimcur * 0.00066666, 1);
-      }
       if (modulelimcur > 1500) //above one amp active modules
       {
         state = 1;
@@ -509,7 +527,14 @@ void Charger_msgs()
   outframe.data.bytes[0] = lowByte(parameters.voltSet);  //Voltage setpoint
   outframe.data.bytes[1] = highByte(parameters.voltSet);//Voltage setpoint
   outframe.data.bytes[2] = 0x14;
-  if (bChargerEnabled) outframe.data.bytes[3] = 0x2e;
+  if (bChargerEnabled)
+  {
+    outframe.data.bytes[3] = 0x2e;
+    if (Vlimmode)
+    {
+      outframe.data.bytes[3] = outframe.data.bytes[3] || 0x80;
+    }
+  }
   else outframe.data.bytes[3] = 0x0e;
   outframe.data.bytes[4] = 0x00;
   outframe.data.bytes[5] = 0x00;
@@ -614,25 +639,6 @@ void evseread()
       }
     }
   }
-  if (debugevse != 0)
-  {
-    Serial.println();
-    Serial.print(val );
-    Serial.print("  Proximity Status : ");
-    switch (Proximity)
-    {
-      case Unconnected:
-        Serial.print("Unconnected");
-        break;
-      case Buttonpress:
-        Serial.print("Button Pressed");
-        break;
-      case Connected:
-        Serial.print("Connected");
-        break;
-
-    }
-  }
 }
 
 void Pilotread()
@@ -673,9 +679,9 @@ void ACcurrentlimit()
   }
   if (Type == 2)
   {
-    if (modulelimcur > cablelim)
+    if (modulelimcur > (cablelim*1.5))
     {
-      modulelimcur = cablelim;
+      modulelimcur = cablelim*1.5;
     }
   }
 }
