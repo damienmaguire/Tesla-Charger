@@ -72,9 +72,10 @@ uint16_t dcvolt[3] = {0, 0, 0};
 uint16_t dccur[3] = {0, 0, 0};
 uint16_t acvolt[3] = {0, 0, 0};
 uint16_t accur[3] = {0, 0, 0};
-byte inlettarg [3] = {0, 0, 0};
-byte curtemplim [3] = {0, 0, 0};
-byte templeg[2][3] = {{0, 0, 0}, {0, 0, 0}};
+byte inlettarg [3] = {0, 0, 0}; //inlet target temperatures, should be used to command cooling.
+byte curtemplim [3] = {0, 0, 0};//current limit due to temperature
+byte templeg[2][3] = {{0, 0, 0}, {0, 0, 0}}; //temperatures reported back
+bool ACpres [3] = {0, 0, 0}; //AC present detection on the modules
 int newframe = 0;
 
 ChargerParams parameters;
@@ -322,16 +323,7 @@ void loop()
       // if nothing else matches, do the default
       break;
   }
-  /*
-    if (curreq != curset)
-    {
-      if ((millis()- tlast) > 1)
-      {
-          tlast = millis();
-          curreq = curreq + curramp;
-      }
-    }
-  */
+
   if (debug != 0)
   {
     if (newframe & 3 != 0)
@@ -342,7 +334,9 @@ void loop()
       {
         Serial.print("  Phase ");
         Serial.print(x + 1);
-        Serial.print(" Feebback //  AC volt: ");
+        Serial.print(" Feebback //  AC present: ");
+        Serial.print(ACpres[x]);
+        Serial.print("  AC volt: ");
         Serial.print(acvolt[x]);
         Serial.print("  AC cur: ");
         Serial.print(accur[x] / 28);
@@ -400,6 +394,7 @@ void loop()
 
 void candecode(CAN_FRAME &frame)
 {
+  int x = 0;
   switch (frame.id)
   {
     case 0x24B: //phase 3 temp message 2
@@ -438,35 +433,62 @@ void candecode(CAN_FRAME &frame)
 
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = ((frame.data.bytes[6] & 3) + (frame.data.bytes[5] & 01111111));
+      accur[0] = (((frame.data.bytes[6] & 3) << 7) + (frame.data.bytes[5] & 01111111));
+      x = frame.data.bytes[2] & 12;
+      if (x != 0)
+      {
+        ACpres[0] = true;
+      }
+      else
+      {
+        ACpres[0] = false;
+      }
       newframe = newframe | 1;
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = ((frame.data.bytes[6] & 3) + (frame.data.bytes[5] & 01111111));
+      accur[1] = (((frame.data.bytes[6] & 3) << 7) + (frame.data.bytes[5] & 01111111));
+      x = frame.data.bytes[2] & 12;
+      if (x != 0)
+      {
+        ACpres[1] = true;
+      }
+      else
+      {
+        ACpres[1] = false;
+      }
       newframe = newframe | 1;
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = ((frame.data.bytes[6] & 3) + (frame.data.bytes[5] & 01111111));
+      accur[2] = (((frame.data.bytes[6] & 3) << 7) + (frame.data.bytes[5] & 01111111));
+      x = frame.data.bytes[2] & 12;
+      if (x != 0)
+      {
+        ACpres[2] = true;
+      }
+      else
+      {
+        ACpres[2] = false;
+      }
       newframe = newframe | 1;
       break;
     case 0x227: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
       //dccur = frame.data.bytes[7]*256+frame.data.bytes[6];
       dccur[0] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
-      dcvolt[0] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.0105286; //we left shift 8 bits to make a 16bit uint.
+      dcvolt[0] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.01052864; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
     case 0x229: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
       //dccur = frame.data.bytes[7]*256+frame.data.bytes[6];
       dccur[1] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
-      dcvolt[1] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.0105286; //we left shift 8 bits to make a 16bit uint.
+      dcvolt[1] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.01052864; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
     case 0x22B: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
       //dccur = frame.data.bytes[7]*256+frame.data.bytes[6];
       dccur[2] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
-      dcvolt[2] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.0105286; //we left shift 8 bits to make a 16bit uint.
+      dcvolt[2] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.010528564; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
 
