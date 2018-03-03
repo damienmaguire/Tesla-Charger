@@ -78,6 +78,9 @@ byte inlettarg [3] = {0, 0, 0}; //inlet target temperatures, should be used to c
 byte curtemplim [3] = {0, 0, 0};//current limit due to temperature
 byte templeg[2][3] = {{0, 0, 0}, {0, 0, 0}}; //temperatures reported back
 bool ACpres [3] = {0, 0, 0}; //AC present detection on the modules
+bool ModEn [3] = {0, 0, 0}; //Module enable feedback on the modules
+bool ModFlt [3] = {0, 0, 0}; //module fault feedback
+byte ModStat [3] = {0, 0, 0};//Module Status
 int newframe = 0;
 
 ChargerParams parameters;
@@ -99,7 +102,7 @@ void setup()
     parameters.can1Speed = 500000;
     parameters.currRampTime = 500;
     parameters.currReq = 0; //max input limit per module 1500 = 1A
-    parameters.enabledChargers = 3; // enable per phase - 123 is all phases - 3 is just phase 3
+    parameters.enabledChargers = 123; // enable per phase - 123 is all phases - 3 is just phase 3
     parameters.mainsRelay = 48;
     parameters.voltSet = 0;
     parameters.autoEnableCharger = 0; //don't auto enable it by default
@@ -254,14 +257,6 @@ void loop()
     Serial.print("V | Set current : ");
     Serial.print(parameters.currReq * 0.00066666, 0);
     Serial.print(" A ");
-    //Serial.print("  ms | Set ramptime : ");
-    //Serial.print(parameters.currRampTime);
-
-    //Serial.print(" Ramp current : ");
-    //curramp = (curset - parameters.currReq) / 500;
-
-    //Serial.print(curramp);
-
     if (parameters.autoEnableCharger == 1)
     {
       Serial.print(" Autostart On   ");
@@ -334,7 +329,16 @@ void loop()
       if (newframe & 3 != 0)
       {
         Serial.println();
-        Serial.println(millis());
+        Serial.print(millis());
+        if (bChargerEnabled)
+        {
+          Serial.println(" ON  ");
+        }
+        else
+        {
+          Serial.println(" OFF ");
+        }
+
         for (int x = 0; x < 3; x++)
         {
           Serial.print("  Phase ");
@@ -357,7 +361,14 @@ void loop()
           Serial.print(templeg[0][x]);
           Serial.print("  ");
           Serial.print(templeg[1][x]);
+          Serial.print(" EN:");
+          Serial.print(ModEn[x]);
+          Serial.print(" Flt:");
+          Serial.print(ModFlt[x]);
+          Serial.print(" Stat:");
+          Serial.print(ModStat[x],BIN);          
           Serial.println();
+          
         }
       }
     }
@@ -382,7 +393,7 @@ void loop()
       Serial.print(" Cable Limit: ");
       Serial.print(cablelim);
       Serial.print(" Module Cur Request: ");
-      Serial.print(modulelimcur/1.5);
+      Serial.print(modulelimcur / 1.5, 0);
 
 
     }
@@ -396,9 +407,13 @@ void loop()
       digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
 
       ACcurrentlimit();
-      if (modulelimcur > 1500) //above one amp active modules
+      if (modulelimcur > 1400) // one amp or more active modules
       {
         state = 1;
+      }
+      else // unplugged or buton pressed stop charging
+      {
+        state = 0;
       }
     }
     else // unplugged or buton pressed stop charging
@@ -415,6 +430,18 @@ void candecode(CAN_FRAME &frame)
   int x = 0;
   switch (frame.id)
   {
+    case 0x217: //phase 1 Status message
+      ModStat[0] = frame.data.bytes[0];
+      break;
+
+    case 0x219: //phase 2 Status message
+      ModStat[1] = frame.data.bytes[0];
+      break;
+
+    case 0x21B: //phase 3 Status message
+      ModStat[2] = frame.data.bytes[0];
+      break;
+
     case 0x24B: //phase 3 temp message 2
       curtemplim[2] = frame.data.bytes[0] * 0.234375;
       newframe = newframe | 1;
@@ -461,6 +488,24 @@ void candecode(CAN_FRAME &frame)
       {
         ACpres[0] = false;
       }
+      x = frame.data.bytes[2] & 0x40;
+      if (x != 0)
+      {
+        ModEn[0] = true;
+      }
+      else
+      {
+        ModEn[0] = false;
+      }
+      x = frame.data.bytes[2] & 0x20;
+      if (x != 0)
+      {
+        ModFlt[0] = true;
+      }
+      else
+      {
+        ModFlt[0] = false;
+      }
       newframe = newframe | 1;
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
@@ -475,6 +520,24 @@ void candecode(CAN_FRAME &frame)
       {
         ACpres[1] = false;
       }
+      x = frame.data.bytes[2] & 0x40;
+      if (x != 0)
+      {
+        ModEn[1] = true;
+      }
+      else
+      {
+        ModEn[1] = false;
+      }
+      x = frame.data.bytes[2] & 0x20;
+      if (x != 0)
+      {
+        ModFlt[1] = true;
+      }
+      else
+      {
+        ModFlt[1] = false;
+      }
       newframe = newframe | 1;
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
@@ -488,6 +551,24 @@ void candecode(CAN_FRAME &frame)
       else
       {
         ACpres[2] = false;
+      }
+      x = frame.data.bytes[2] & 0x40;
+      if (x != 0)
+      {
+        ModEn[2] = true;
+      }
+      else
+      {
+        ModEn[2] = false;
+      }
+      x = frame.data.bytes[2] & 0x20;
+      if (x != 0)
+      {
+        ModFlt[2] = true;
+      }
+      else
+      {
+        ModFlt[2] = false;
       }
       newframe = newframe | 1;
       break;
@@ -679,9 +760,9 @@ void ACcurrentlimit()
   }
   if (Type == 2)
   {
-    if (modulelimcur > (cablelim*1.5))
+    if (modulelimcur > (cablelim * 1.5))
     {
-      modulelimcur = cablelim*1.5;
+      modulelimcur = cablelim * 1.5;
     }
   }
 }
