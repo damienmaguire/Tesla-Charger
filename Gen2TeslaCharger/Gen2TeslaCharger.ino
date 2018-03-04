@@ -30,7 +30,9 @@ template<class T> inline Print &operator <<(Print &obj, T arg) {
 }
 
 //*********GENERAL VARIABLE   DATA ******************
-int debug = 1; // 1 = show Proximity status and Pilot current limmits
+int debugevse = 1; // 1 = show Proximity status and Pilot current limmits
+int debug = 1; // 1 = show phase module CAN feedback
+
 
 uint16_t curset = 0;
 signed long curramp = 0;
@@ -56,24 +58,37 @@ volatile int dutycycle = 0;
 uint16_t cablelim = 0; // Type 2 cable current limit
 
 //*********Single or Three Phase Config VARIABLE   DATA ******************
-byte Config = 0;
+byte Config = 1;
 uint16_t modulelimcur = 0;
 
 //proximity status values
 #define Singlephase 0 // all parrallel on one phase Type 1
 #define Threephase 1 // one module per phase Type 2
 
+//*********Charger Control VARIABLE   DATA ******************
 
+bool Vlimmode = true; // Set charges to voltage limit mode
 
 //*********Feedback from charge VARIABLE   DATA ******************
 uint16_t dcvolt[3] = {0, 0, 0};
 uint16_t dccur[3] = {0, 0, 0};
 uint16_t acvolt[3] = {0, 0, 0};
 uint16_t accur[3] = {0, 0, 0};
-
+byte inlettarg [3] = {0, 0, 0}; //inlet target temperatures, should be used to command cooling.
+byte curtemplim [3] = {0, 0, 0};//current limit due to temperature
+byte templeg[2][3] = {{0, 0, 0}, {0, 0, 0}}; //temperatures reported back
+bool ACpres [3] = {0, 0, 0}; //AC present detection on the modules
+bool ModEn [3] = {0, 0, 0}; //Module enable feedback on the modules
+bool ModFlt [3] = {0, 0, 0}; //module fault feedback
+byte ModStat [3] = {0, 0, 0};//Module Status
 int newframe = 0;
 
 ChargerParams parameters;
+
+//*********Charger Messages VARIABLE   DATA ******************
+int ControlID = 0x300;
+int StatusID = 0x410;
+
 
 void setup()
 {
@@ -92,7 +107,7 @@ void setup()
     parameters.can1Speed = 500000;
     parameters.currRampTime = 500;
     parameters.currReq = 0; //max input limit per module 1500 = 1A
-    parameters.enabledChargers = 123;
+    parameters.enabledChargers = 123; // enable per phase - 123 is all phases - 3 is just phase 3
     parameters.mainsRelay = 48;
     parameters.voltSet = 0;
     parameters.autoEnableCharger = 0; //don't auto enable it by default
@@ -247,14 +262,6 @@ void loop()
     Serial.print("V | Set current : ");
     Serial.print(parameters.currReq * 0.00066666, 0);
     Serial.print(" A ");
-    //Serial.print("  ms | Set ramptime : ");
-    //Serial.print(parameters.currRampTime);
-
-    //Serial.print(" Ramp current : ");
-    //curramp = (curset - parameters.currReq) / 500;
-
-    //Serial.print(curramp);
-
     if (parameters.autoEnableCharger == 1)
     {
       Serial.print(" Autostart On   ");
@@ -318,39 +325,83 @@ void loop()
       // if nothing else matches, do the default
       break;
   }
-  /*
-    if (curreq != curset)
-    {
-      if ((millis()- tlast) > 1)
-      {
-          tlast = millis();
-          curreq = curreq + curramp;
-      }
-    }
-  */
-  if (debug != 0)
+
+  if (tlast <  (millis() - 500))
   {
-    /*
+    tlast = millis();
+    if (debug != 0)
+    {
       if (newframe & 3 != 0)
       {
-      Serial.println();
-      Serial.print(millis());
-      for (int x = 0; x < 3; x++)
-      {
-        Serial.print("  Phase ");
-        Serial.print(x + 1);
-        Serial.print(" Feebback //  AC voltage : ");
-        Serial.print(acvolt[x]);
-        Serial.print("  AC current : ");
-        Serial.print(accur[x] / 28);
-        Serial.print("  DC voltage : ");
-        Serial.print(dcvolt[x]);
-        Serial.print("  DC current : ");
-        Serial.print(dccur[x] / 1000, 2);
         Serial.println();
+        Serial.print(millis());
+        if (bChargerEnabled)
+        {
+          Serial.println(" ON  ");
+        }
+        else
+        {
+          Serial.println(" OFF ");
+        }
+
+        for (int x = 0; x < 3; x++)
+        {
+          Serial.print("  Phase ");
+          Serial.print(x + 1);
+          Serial.print(" Feebback //  AC present: ");
+          Serial.print(ACpres[x]);
+          Serial.print("  AC volt: ");
+          Serial.print(acvolt[x]);
+          Serial.print("  AC cur: ");
+          Serial.print(accur[x] / 28);
+          Serial.print("  DC volt: ");
+          Serial.print(dcvolt[x]);
+          Serial.print("  DC cur: ");
+          Serial.print(dccur[x] / 1000, 2);
+          Serial.print("  Inlet Targ: ");
+          Serial.print(inlettarg[x]);
+          Serial.print("  Temp Lim Cur: ");
+          Serial.print(curtemplim[x]);
+          Serial.print("  ");
+          Serial.print(templeg[0][x]);
+          Serial.print("  ");
+          Serial.print(templeg[1][x]);
+          Serial.print(" EN:");
+          Serial.print(ModEn[x]);
+          Serial.print(" Flt:");
+          Serial.print(ModFlt[x]);
+          Serial.print(" Stat:");
+          Serial.print(ModStat[x], BIN);
+          Serial.println();
+
+        }
       }
+    }
+    if (debugevse != 0)
+    {
+      Serial.print("  Proximity Status : ");
+      switch (Proximity)
+      {
+        case Unconnected:
+          Serial.print("Unconnected");
+          break;
+        case Buttonpress:
+          Serial.print("Button Pressed");
+          break;
+        case Connected:
+          Serial.print("Connected");
+          break;
+
       }
-    */
+      Serial.print(" AC limit : ");
+      Serial.print(accurlim);
+      Serial.print(" Cable Limit: ");
+      Serial.print(cablelim);
+      Serial.print(" Module Cur Request: ");
+      Serial.print(modulelimcur / 1.5, 0);
+
+
+    }
   }
 
   evseread();
@@ -359,24 +410,15 @@ void loop()
     if (Proximity == Connected) //check if plugged in
     {
       digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
-      if (debug != 0)
-      {
-        Serial.println();
-        Serial.print(millis());
-        Serial.print(" AC limit : ");
-        Serial.print(accurlim);
-        Serial.print("  ");
-        Serial.print(dutycycle);
-      }
+
       ACcurrentlimit();
-      if (debug != 0)
-      {
-        Serial.print(" Phase limit : ");
-        Serial.print(modulelimcur * 0.00066666, 1);
-      }
-      if (modulelimcur > 1500) //above one amp active modules
+      if (modulelimcur > 1400) // one amp or more active modules
       {
         state = 1;
+      }
+      else // unplugged or buton pressed stop charging
+      {
+        state = 0;
       }
     }
     else // unplugged or buton pressed stop charging
@@ -390,39 +432,167 @@ void loop()
 
 void candecode(CAN_FRAME &frame)
 {
+  int x = 0;
   switch (frame.id)
   {
+    case 0x217: //phase 1 Status message
+      ModStat[0] = frame.data.bytes[0];
+      break;
+
+    case 0x219: //phase 2 Status message
+      ModStat[1] = frame.data.bytes[0];
+      break;
+
+    case 0x21B: //phase 3 Status message
+      ModStat[2] = frame.data.bytes[0];
+      break;
+
+    case 0x24B: //phase 3 temp message 2
+      curtemplim[2] = frame.data.bytes[0] * 0.234375;
+      newframe = newframe | 1;
+      break;
+
+    case 0x23B: //phase 3 temp message 1
+      templeg[0][2] = frame.data.bytes[0] - 40;
+      templeg[1][2] = frame.data.bytes[1] - 40;
+      inlettarg[2] = frame.data.bytes[5] - 40;
+      newframe = newframe | 1;
+      break;
+
+    case 0x239: //phase 2 temp message 1
+      templeg[0][1] = frame.data.bytes[0] - 40;
+      templeg[1][1] = frame.data.bytes[1] - 40;
+      inlettarg[1] = frame.data.bytes[5] - 40;
+      newframe = newframe | 1;
+      break;
+    case 0x249: //phase 2 temp message 2
+      curtemplim[1] = frame.data.bytes[0] * 0.234375;
+      newframe = newframe | 1;
+      break;
+
+    case 0x237: //phase 1 temp message 1
+      templeg[0][0] = frame.data.bytes[0] - 40;
+      templeg[1][0] = frame.data.bytes[1] - 40;
+      inlettarg[0] = frame.data.bytes[5] - 40;
+      newframe = newframe | 1;
+      break;
+    case 0x247: //phase 2 temp message 2
+      curtemplim[0] = frame.data.bytes[0] * 0.234375;
+      newframe = newframe | 1;
+      break;
+
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = ((frame.data.bytes[6] & 3) + (frame.data.bytes[5] & 01111111));
+      accur[0] = (((frame.data.bytes[6] & 3) << 7) + (frame.data.bytes[5] & 01111111));
+      x = frame.data.bytes[2] & 12;
+      if (x != 0)
+      {
+        ACpres[0] = true;
+      }
+      else
+      {
+        ACpres[0] = false;
+      }
+      x = frame.data.bytes[2] & 0x40;
+      if (x != 0)
+      {
+        ModEn[0] = true;
+      }
+      else
+      {
+        ModEn[0] = false;
+      }
+      x = frame.data.bytes[2] & 0x20;
+      if (x != 0)
+      {
+        ModFlt[0] = true;
+      }
+      else
+      {
+        ModFlt[0] = false;
+      }
       newframe = newframe | 1;
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = ((frame.data.bytes[6] & 3) + (frame.data.bytes[5] & 01111111));
+      accur[1] = (((frame.data.bytes[6] & 3) << 7) + (frame.data.bytes[5] & 01111111));
+      x = frame.data.bytes[2] & 12;
+      if (x != 0)
+      {
+        ACpres[1] = true;
+      }
+      else
+      {
+        ACpres[1] = false;
+      }
+      x = frame.data.bytes[2] & 0x40;
+      if (x != 0)
+      {
+        ModEn[1] = true;
+      }
+      else
+      {
+        ModEn[1] = false;
+      }
+      x = frame.data.bytes[2] & 0x20;
+      if (x != 0)
+      {
+        ModFlt[1] = true;
+      }
+      else
+      {
+        ModFlt[1] = false;
+      }
       newframe = newframe | 1;
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = ((frame.data.bytes[6] & 3) + (frame.data.bytes[5] & 01111111));
+      accur[2] = (((frame.data.bytes[6] & 3) << 7) + (frame.data.bytes[5] & 01111111));
+      x = frame.data.bytes[2] & 12;
+      if (x != 0)
+      {
+        ACpres[2] = true;
+      }
+      else
+      {
+        ACpres[2] = false;
+      }
+      x = frame.data.bytes[2] & 0x40;
+      if (x != 0)
+      {
+        ModEn[2] = true;
+      }
+      else
+      {
+        ModEn[2] = false;
+      }
+      x = frame.data.bytes[2] & 0x20;
+      if (x != 0)
+      {
+        ModFlt[2] = true;
+      }
+      else
+      {
+        ModFlt[2] = false;
+      }
       newframe = newframe | 1;
       break;
     case 0x227: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
       //dccur = frame.data.bytes[7]*256+frame.data.bytes[6];
       dccur[0] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
-      dcvolt[0] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.0105286; //we left shift 8 bits to make a 16bit uint.
+      dcvolt[0] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.01052864; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
     case 0x229: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
       //dccur = frame.data.bytes[7]*256+frame.data.bytes[6];
       dccur[1] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
-      dcvolt[1] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.0105286; //we left shift 8 bits to make a 16bit uint.
+      dcvolt[1] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.01052864; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
     case 0x22B: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
       //dccur = frame.data.bytes[7]*256+frame.data.bytes[6];
       dccur[2] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
-      dcvolt[2] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.0105286; //we left shift 8 bits to make a 16bit uint.
+      dcvolt[2] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.010528564; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
 
@@ -443,7 +613,14 @@ void Charger_msgs()
   outframe.data.bytes[0] = lowByte(parameters.voltSet);  //Voltage setpoint
   outframe.data.bytes[1] = highByte(parameters.voltSet);//Voltage setpoint
   outframe.data.bytes[2] = 0x14;
-  if (bChargerEnabled) outframe.data.bytes[3] = 0x2e;
+  if (bChargerEnabled)
+  {
+    outframe.data.bytes[3] = 0x2e;
+    if (Vlimmode)
+    {
+      outframe.data.bytes[3] = outframe.data.bytes[3] || 0x80;
+    }
+  }
   else outframe.data.bytes[3] = 0x0e;
   outframe.data.bytes[4] = 0x00;
   outframe.data.bytes[5] = 0x00;
@@ -496,6 +673,31 @@ void Charger_msgs()
   outframe.data.bytes[7] = 0xff;
   Can0.sendFrame(outframe);
   ////////////////////////////////////////////////////////////////////////////////////////////////////////
+  uint16_t y = 0;
+  outframe.id = StatusID;
+  outframe.length = 8;            // Data payload 8 bytes
+  outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
+  outframe.rtr = 0;                 //No request
+  outframe.data.bytes[0] = 0x00;
+  outframe.data.bytes[1] = 0x00;
+  for (int x = 0; x < 3; x++)
+  {
+    y = y +  dcvolt[x] ;
+  }
+  outframe.data.bytes[1] = y / 3;
+  outframe.data.bytes[2] = 0x00;
+  for (int x = 0; x < 3; x++)
+  {
+    outframe.data.bytes[2] = outframe.data.bytes[2] + dccur[x] ;
+  }
+  outframe.data.bytes[3] = 0x00;
+  outframe.data.bytes[4] = 0x00;
+  outframe.data.bytes[5] = lowByte(modulelimcur * 0.66666);
+  outframe.data.bytes[6] = highByte(modulelimcur * 0.66666);
+  outframe.data.bytes[7] = 0x00;
+  outframe.data.bytes[7] = Proximity << 6;
+  outframe.data.bytes[7] = outframe.data.bytes[7] || (Type << 4);
+  Can1.sendFrame(outframe);
 }
 
 void evseread()
@@ -548,25 +750,6 @@ void evseread()
       }
     }
   }
-  if (debug != 0)
-  {
-    Serial.println();
-    Serial.print(val );
-    Serial.print("  Proximity Status : ");
-    switch (Proximity)
-    {
-      case Unconnected:
-        Serial.print("Unconnected");
-        break;
-      case Buttonpress:
-        Serial.print("Button Pressed");
-        break;
-      case Connected:
-        Serial.print("Connected");
-        break;
-
-    }
-  }
 }
 
 void Pilotread()
@@ -589,28 +772,42 @@ void Pilotcalc()
 
 void ACcurrentlimit()
 {
-  if (micros() - pilottimer > 1200) //too big a gap in pilot signal kills means signal error or disconnected so no current allowed.
+  if (parameters.autoEnableCharger == 1)
   {
-    accurlim = 0;
-  }
-  if (Type == 2)
-  {
-    if (modulelimcur > cablelim)
+    if (micros() - pilottimer > 1200) //too big a gap in pilot signal kills means signal error or disconnected so no current allowed.
     {
-      modulelimcur = cablelim;
+      accurlim = 0;
     }
-  }
-  if (Config == Singlephase)
-  {
-    modulelimcur = (accurlim / 3) * 1.5 ; // all module parallel, sharing AC input current
+    if (Config == Singlephase)
+    {
+      modulelimcur = (accurlim / 3) * 1.5 ; // all module parallel, sharing AC input current
+    }
+    else
+    {
+      modulelimcur = accurlim * 1.5; // one module per phase, EVSE current limit is per phase
+    }
+    if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
+    {
+      modulelimcur = parameters.currReq;
+    }
+    if (Type == 2)
+    {
+      if (modulelimcur > (cablelim * 1.5))
+      {
+        modulelimcur = cablelim * 1.5;
+      }
+    }
   }
   else
   {
-    modulelimcur = accurlim * 1.5; // one module per phase, EVSE current limit is per phase
-  }
-  if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
-  {
-    modulelimcur = parameters.currReq;
+    if (Config == Singlephase)
+    {
+      modulelimcur = (parameters.currReq / 3); // all module parallel, sharing AC input current
+    }
+    else
+    {
+      modulelimcur = parameters.currReq; // one module per phase, EVSE current limit is per phase
+    }
   }
 }
 
