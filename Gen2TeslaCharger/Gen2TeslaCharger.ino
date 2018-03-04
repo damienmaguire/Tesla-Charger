@@ -65,7 +65,7 @@ uint16_t modulelimcur = 0;
 #define Singlephase 0 // all parrallel on one phase Type 1
 #define Threephase 1 // one module per phase Type 2
 
-//*********Charer Control VARIABLE   DATA ******************
+//*********Charger Control VARIABLE   DATA ******************
 
 bool Vlimmode = true; // Set charges to voltage limit mode
 
@@ -84,6 +84,11 @@ byte ModStat [3] = {0, 0, 0};//Module Status
 int newframe = 0;
 
 ChargerParams parameters;
+
+//*********Charger Messages VARIABLE   DATA ******************
+int ControlID = 0x300;
+int StatusID = 0x410;
+
 
 void setup()
 {
@@ -366,9 +371,9 @@ void loop()
           Serial.print(" Flt:");
           Serial.print(ModFlt[x]);
           Serial.print(" Stat:");
-          Serial.print(ModStat[x],BIN);          
+          Serial.print(ModStat[x], BIN);
           Serial.println();
-          
+
         }
       }
     }
@@ -668,6 +673,31 @@ void Charger_msgs()
   outframe.data.bytes[7] = 0xff;
   Can0.sendFrame(outframe);
   ////////////////////////////////////////////////////////////////////////////////////////////////////////
+  uint16_t y = 0;
+  outframe.id = StatusID;
+  outframe.length = 8;            // Data payload 8 bytes
+  outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
+  outframe.rtr = 0;                 //No request
+  outframe.data.bytes[0] = 0x00;
+  outframe.data.bytes[1] = 0x00;
+  for (int x = 0; x < 3; x++)
+  {
+    y = y +  dcvolt[x] ;
+  }
+  outframe.data.bytes[1] = y / 3;
+  outframe.data.bytes[2] = 0x00;
+  for (int x = 0; x < 3; x++)
+  {
+    outframe.data.bytes[2] = outframe.data.bytes[2] + dccur[x] ;
+  }
+  outframe.data.bytes[3] = 0x00;
+  outframe.data.bytes[4] = 0x00;
+  outframe.data.bytes[5] = lowByte(modulelimcur * 0.66666);
+  outframe.data.bytes[6] = highByte(modulelimcur * 0.66666);
+  outframe.data.bytes[7] = 0x00;
+  outframe.data.bytes[7] = Proximity << 6;
+  outframe.data.bytes[7] = outframe.data.bytes[7] || (Type << 4);
+  Can1.sendFrame(outframe);
 }
 
 void evseread()
@@ -742,27 +772,41 @@ void Pilotcalc()
 
 void ACcurrentlimit()
 {
-  if (micros() - pilottimer > 1200) //too big a gap in pilot signal kills means signal error or disconnected so no current allowed.
+  if (parameters.autoEnableCharger == 1)
   {
-    accurlim = 0;
-  }
-  if (Config == Singlephase)
-  {
-    modulelimcur = (accurlim / 3) * 1.5 ; // all module parallel, sharing AC input current
+    if (micros() - pilottimer > 1200) //too big a gap in pilot signal kills means signal error or disconnected so no current allowed.
+    {
+      accurlim = 0;
+    }
+    if (Config == Singlephase)
+    {
+      modulelimcur = (accurlim / 3) * 1.5 ; // all module parallel, sharing AC input current
+    }
+    else
+    {
+      modulelimcur = accurlim * 1.5; // one module per phase, EVSE current limit is per phase
+    }
+    if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
+    {
+      modulelimcur = parameters.currReq;
+    }
+    if (Type == 2)
+    {
+      if (modulelimcur > (cablelim * 1.5))
+      {
+        modulelimcur = cablelim * 1.5;
+      }
+    }
   }
   else
   {
-    modulelimcur = accurlim * 1.5; // one module per phase, EVSE current limit is per phase
-  }
-  if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
-  {
-    modulelimcur = parameters.currReq;
-  }
-  if (Type == 2)
-  {
-    if (modulelimcur > (cablelim * 1.5))
+    if (Config == Singlephase)
     {
-      modulelimcur = cablelim * 1.5;
+      modulelimcur = (parameters.currReq / 3); // all module parallel, sharing AC input current
+    }
+    else
+    {
+      modulelimcur = parameters.currReq; // one module per phase, EVSE current limit is per phase
     }
   }
 }
