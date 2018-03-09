@@ -162,7 +162,6 @@ void setup()
   pinMode(EVSE_ACTIVATE, OUTPUT); //pull Pilot to 6V
   ///////////////////////////////////////////////////////////////////////////////////////
 
-
   delay(1000);                       // wait for a second
   digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
   delay(1000);                       // wait for a second
@@ -247,6 +246,7 @@ void loop()
   {
     EEPROM.write(0, parameters);
     Serial.println();
+    Serial.println();
     if (state == 1)
     {
       Serial.print("Charger On   ");
@@ -271,6 +271,8 @@ void loop()
       Serial.print(" Autostart Off   ");
     }
     setting = 0;
+    Serial.println();
+    Serial.println();
   }
 
   switch (state)
@@ -403,7 +405,8 @@ void loop()
 
     }
   }
-
+      ACcurrentlimit();
+      
   evseread();
   if (parameters.autoEnableCharger == 1)
   {
@@ -411,7 +414,7 @@ void loop()
     {
       digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
 
-      ACcurrentlimit();
+
       if (modulelimcur > 1400) // one amp or more active modules
       {
         state = 1;
@@ -616,10 +619,6 @@ void Charger_msgs()
   if (bChargerEnabled)
   {
     outframe.data.bytes[3] = 0x2e;
-    if (Vlimmode)
-    {
-      outframe.data.bytes[3] = outframe.data.bytes[3] || 0x80;
-    }
   }
   else outframe.data.bytes[3] = 0x0e;
   outframe.data.bytes[4] = 0x00;
@@ -673,6 +672,8 @@ void Charger_msgs()
   outframe.data.bytes[7] = 0xff;
   Can0.sendFrame(outframe);
   ////////////////////////////////////////////////////////////////////////////////////////////////////////
+  /*
+  
   uint16_t y = 0;
   outframe.id = StatusID;
   outframe.length = 8;            // Data payload 8 bytes
@@ -692,12 +693,13 @@ void Charger_msgs()
   }
   outframe.data.bytes[3] = 0x00;
   outframe.data.bytes[4] = 0x00;
-  outframe.data.bytes[5] = lowByte(modulelimcur * 0.66666);
-  outframe.data.bytes[6] = highByte(modulelimcur * 0.66666);
+  outframe.data.bytes[5] = lowByte (modulelimcur * 0.66666);
+  outframe.data.bytes[6] = highByte (modulelimcur * 0.66666);
   outframe.data.bytes[7] = 0x00;
   outframe.data.bytes[7] = Proximity << 6;
   outframe.data.bytes[7] = outframe.data.bytes[7] || (Type << 4);
   Can1.sendFrame(outframe);
+  */
 }
 
 void evseread()
@@ -807,7 +809,7 @@ void ACcurrentlimit()
     else
     {
       modulelimcur = parameters.currReq; // one module per phase, EVSE current limit is per phase
-    }
+    }    
   }
 }
 
