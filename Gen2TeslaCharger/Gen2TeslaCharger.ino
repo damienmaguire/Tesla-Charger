@@ -690,10 +690,10 @@ void Charger_msgs()
   totdccur =0;
   for (int x = 0; x < 3; x++)
   {
-    totdccur= totdccur + (dccur[x]*0.1678466) ;
+    totdccur = totdccur + (dccur[x]*0.1678466) ;
   }
-  outframe.data.bytes[5] = lowByte (uint16_t (totdccur)); //0.005Amp  
-  outframe.data.bytes[6] = highByte (uint16_t (totdccur));  //0.005Amp
+  outframe.data.bytes[3] = lowByte (uint16_t (totdccur)); //0.005Amp  
+  outframe.data.bytes[4] = highByte (uint16_t (totdccur));  //0.005Amp
   outframe.data.bytes[5] = lowByte (uint16_t (modulelimcur * 0.66666));
   outframe.data.bytes[6] = highByte (uint16_t (modulelimcur * 0.66666));
   outframe.data.bytes[7] = 0x00;
