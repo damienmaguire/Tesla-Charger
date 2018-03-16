@@ -70,9 +70,10 @@ uint16_t modulelimcur = 0;
 bool Vlimmode = true; // Set charges to voltage limit mode
 
 //*********Feedback from charge VARIABLE   DATA ******************
-uint16_t dcvolt[3] = {0, 0, 0};
-uint16_t dccur[3] = {0, 0, 0};
-uint16_t acvolt[3] = {0, 0, 0};
+uint16_t dcvolt[3] = {0, 0, 0};//1 = 1V
+uint16_t dccur[3] = {0, 0, 0}; 
+uint16_t totdccur = 0;//1 = 0.25 Amp
+uint16_t acvolt[3] = {0, 0, 0};//1 = 0.06666 Amp
 uint16_t accur[3] = {0, 0, 0};
 byte inlettarg [3] = {0, 0, 0}; //inlet target temperatures, should be used to command cooling.
 byte curtemplim [3] = {0, 0, 0};//current limit due to temperature
@@ -355,11 +356,11 @@ void loop()
           Serial.print("  AC volt: ");
           Serial.print(acvolt[x]);
           Serial.print("  AC cur: ");
-          Serial.print(accur[x] / 28);
+          Serial.print((accur[x]*0.06666), 2);
           Serial.print("  DC volt: ");
           Serial.print(dcvolt[x]);
           Serial.print("  DC cur: ");
-          Serial.print(dccur[x] / 1000, 2);
+          Serial.print(dccur[x]*0.000839233, 2);
           Serial.print("  Inlet Targ: ");
           Serial.print(inlettarg[x]);
           Serial.print("  Temp Lim Cur: ");
@@ -486,7 +487,7 @@ void candecode(CAN_FRAME &frame)
 
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = (((frame.data.bytes[6] & 3) << 7) + (frame.data.bytes[5] & 01111111));
+      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F)<<2)| uint16_t(frame.data.bytes[6] & 112)>>6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -518,7 +519,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = (((frame.data.bytes[6] & 3) << 7) + (frame.data.bytes[5] & 01111111));
+      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F)<<2)| uint16_t(frame.data.bytes[6] & 112)>>6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -550,7 +551,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = (((frame.data.bytes[6] & 3) << 7) + (frame.data.bytes[5] & 01111111));
+      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F)<<2)| uint16_t(frame.data.bytes[6] & 112)>>6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -582,7 +583,8 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x227: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
       //dccur = frame.data.bytes[7]*256+frame.data.bytes[6];
-      dccur[0] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
+      dccur[0] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233
+;
       dcvolt[0] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.01052864; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
@@ -672,34 +674,32 @@ void Charger_msgs()
   outframe.data.bytes[7] = 0xff;
   Can0.sendFrame(outframe);
   ////////////////////////////////////////////////////////////////////////////////////////////////////////
-  /*
-  
   uint16_t y = 0;
   outframe.id = StatusID;
   outframe.length = 8;            // Data payload 8 bytes
   outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
   outframe.rtr = 0;                 //No request
   outframe.data.bytes[0] = 0x00;
-  outframe.data.bytes[1] = 0x00;
   for (int x = 0; x < 3; x++)
   {
     y = y +  dcvolt[x] ;
   }
-  outframe.data.bytes[1] = y / 3;
+  outframe.data.bytes[0] = y / 3;
+  outframe.data.bytes[1] = 0x00;
   outframe.data.bytes[2] = 0x00;
+  totdccur =0;
   for (int x = 0; x < 3; x++)
   {
-    outframe.data.bytes[2] = outframe.data.bytes[2] + dccur[x] ;
+    totdccur= totdccur + (dccur[x]*0.1678466) ;
   }
-  outframe.data.bytes[3] = 0x00;
-  outframe.data.bytes[4] = 0x00;
-  outframe.data.bytes[5] = lowByte (modulelimcur * 0.66666);
-  outframe.data.bytes[6] = highByte (modulelimcur * 0.66666);
+  outframe.data.bytes[5] = lowByte (uint16_t (totdccur)); //0.005Amp  
+  outframe.data.bytes[6] = highByte (uint16_t (totdccur));  //0.005Amp
+  outframe.data.bytes[5] = lowByte (uint16_t (modulelimcur * 0.66666));
+  outframe.data.bytes[6] = highByte (uint16_t (modulelimcur * 0.66666));
   outframe.data.bytes[7] = 0x00;
   outframe.data.bytes[7] = Proximity << 6;
   outframe.data.bytes[7] = outframe.data.bytes[7] || (Type << 4);
   Can1.sendFrame(outframe);
-  */
 }
 
 void evseread()
