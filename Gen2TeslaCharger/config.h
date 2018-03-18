@@ -27,7 +27,6 @@ typedef struct
     uint8_t  autoEnableCharger;
     uint16_t voltSet;
     uint16_t currReq;
-    uint16_t currRampTime;
     uint32_t can0Speed;
     uint32_t can1Speed;
 }   ChargerParams;

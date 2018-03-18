@@ -35,7 +35,6 @@ int debug = 1; // 1 = show phase module CAN feedback
 
 
 uint16_t curset = 0;
-signed long curramp = 0;
 int  setting = 1;
 int incomingByte = 0;
 int state;
@@ -59,20 +58,23 @@ uint16_t cablelim = 0; // Type 2 cable current limit
 
 //*********Single or Three Phase Config VARIABLE   DATA ******************
 byte Config = 1;
-uint16_t modulelimcur = 0;
 
 //proximity status values
 #define Singlephase 0 // all parrallel on one phase Type 1
 #define Threephase 1 // one module per phase Type 2
 
 //*********Charger Control VARIABLE   DATA ******************
-
 bool Vlimmode = true; // Set charges to voltage limit mode
+uint16_t modulelimcur = 0;
+uint16_t maxaccur, dcaclim = 16000; //maximum AC current in mA
+uint16_t maxdccur = 45000; //max DC current outputin mA
+
+
 
 //*********Feedback from charge VARIABLE   DATA ******************
 uint16_t dcvolt[3] = {0, 0, 0};//1 = 1V
-uint16_t dccur[3] = {0, 0, 0}; 
-uint16_t totdccur = 0;//1 = 0.25 Amp
+uint16_t dccur[3] = {0, 0, 0};
+uint16_t totdccur = 0;//1 = 0.005Amp
 uint16_t acvolt[3] = {0, 0, 0};//1 = 0.06666 Amp
 uint16_t accur[3] = {0, 0, 0};
 byte inlettarg [3] = {0, 0, 0}; //inlet target temperatures, should be used to command cooling.
@@ -106,11 +108,10 @@ void setup()
     parameters.version = EEPROM_VERSION;
     parameters.can0Speed = 500000;
     parameters.can1Speed = 500000;
-    parameters.currRampTime = 500;
     parameters.currReq = 0; //max input limit per module 1500 = 1A
     parameters.enabledChargers = 123; // enable per phase - 123 is all phases - 3 is just phase 3
     parameters.mainsRelay = 48;
-    parameters.voltSet = 0;
+    parameters.voltSet = 32000;
     parameters.autoEnableCharger = 0; //don't auto enable it by default
     EEPROM.write(0, parameters);
   }
@@ -163,10 +164,10 @@ void setup()
   pinMode(EVSE_ACTIVATE, OUTPUT); //pull Pilot to 6V
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  delay(1000);                       // wait for a second
-  digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
-  delay(1000);                       // wait for a second
-  digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
+  //delay(1000);                       // wait for a second
+  //digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
+  //delay(1000);                       // wait for a second
+  //digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
   delay(1000);                       // wait for a second
   digitalWrite(CHARGER3_ENABLE, HIGH);//enable phase 3 power module
 
@@ -200,17 +201,17 @@ void loop()
           setting = 1;
         }
         break;
+      case 'm'://m for dc current setting in whole numbers
+        if (Serial.available() > 0)
+        {
+          maxdccur = (Serial.parseInt() * 1000);
+          setting = 1;
+        }
+        break;
       case 'v'://v for voltage setting in whole numbers
         if (Serial.available() > 0)
         {
           parameters.voltSet = (Serial.parseInt() * 100);
-          setting = 1;
-        }
-        break;
-      case 't'://t for current ramp time
-        if (Serial.available() > 0)
-        {
-          parameters.currRampTime = Serial.parseInt();
           setting = 1;
         }
         break;
@@ -262,6 +263,8 @@ void loop()
     Serial.print(parameters.voltSet * 0.01f, 0);
     Serial.print("V | Set current : ");
     Serial.print(parameters.currReq * 0.00066666, 0);
+    Serial.print(" A ");
+    Serial.print(maxdccur * 0.001, 1);
     Serial.print(" A ");
     if (parameters.autoEnableCharger == 1)
     {
@@ -356,11 +359,11 @@ void loop()
           Serial.print("  AC volt: ");
           Serial.print(acvolt[x]);
           Serial.print("  AC cur: ");
-          Serial.print((accur[x]*0.06666), 2);
+          Serial.print((accur[x] * 0.06666), 2);
           Serial.print("  DC volt: ");
           Serial.print(dcvolt[x]);
           Serial.print("  DC cur: ");
-          Serial.print(dccur[x]*0.000839233, 2);
+          Serial.print(dccur[x] * 0.000839233, 2);
           Serial.print("  Inlet Targ: ");
           Serial.print(inlettarg[x]);
           Serial.print("  Temp Lim Cur: ");
@@ -402,15 +405,16 @@ void loop()
       Serial.print(cablelim);
       Serial.print(" Module Cur Request: ");
       Serial.print(modulelimcur / 1.5, 0);
-
-
+      Serial.print(" DC AC Cur Lim: ");
+      Serial.print(dcaclim);
     }
+    DCcurrentlimit();
   }
-      ACcurrentlimit();
-      
-  evseread();
+  ACcurrentlimit();
+
   if (parameters.autoEnableCharger == 1)
   {
+    evseread();
     if (Proximity == Connected) //check if plugged in
     {
       digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
@@ -487,7 +491,7 @@ void candecode(CAN_FRAME &frame)
 
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F)<<2)| uint16_t(frame.data.bytes[6] & 112)>>6) ;
+      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] & 112) >> 6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -519,7 +523,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F)<<2)| uint16_t(frame.data.bytes[6] & 112)>>6) ;
+      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] & 112) >> 6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -551,7 +555,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F)<<2)| uint16_t(frame.data.bytes[6] & 112)>>6) ;
+      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] & 112) >> 6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -582,23 +586,22 @@ void candecode(CAN_FRAME &frame)
       newframe = newframe | 1;
       break;
     case 0x227: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
-      //dccur = frame.data.bytes[7]*256+frame.data.bytes[6];
-      dccur[0] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233
-;
+      dccur[0] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233 ;
       dcvolt[0] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.01052864; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
     case 0x229: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
-      //dccur = frame.data.bytes[7]*256+frame.data.bytes[6];
       dccur[1] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
       dcvolt[1] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.01052864; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
     case 0x22B: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
-      //dccur = frame.data.bytes[7]*256+frame.data.bytes[6];
       dccur[2] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
       dcvolt[2] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.010528564; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
+      Serial.println();
+      Serial.print(dccur[2]);
+      Serial.println();
       break;
 
     default:
@@ -685,14 +688,25 @@ void Charger_msgs()
     y = y +  dcvolt[x] ;
   }
   outframe.data.bytes[0] = y / 3;
-  outframe.data.bytes[1] = 0x00;
-  outframe.data.bytes[2] = 0x00;
-  totdccur =0;
-  for (int x = 0; x < 3; x++)
+
+  y = 0;
+
+  if (Config == Singlephase)
   {
-    totdccur = totdccur + (dccur[x]*0.1678466) ;
+    for (int x = 0; x < 3; x++)
+    {
+      y = y + (accur[x] * 66.66) ;
+    }
   }
-  outframe.data.bytes[3] = lowByte (uint16_t (totdccur)); //0.005Amp  
+  else
+  {
+    y = accur[2] * 66.66;
+  }
+
+  outframe.data.bytes[1] = lowByte (y);
+  outframe.data.bytes[2] = highByte (y);
+
+  outframe.data.bytes[3] = lowByte (uint16_t (totdccur)); //0.005Amp
   outframe.data.bytes[4] = highByte (uint16_t (totdccur));  //0.005Amp
   outframe.data.bytes[5] = lowByte (uint16_t (modulelimcur * 0.66666));
   outframe.data.bytes[6] = highByte (uint16_t (modulelimcur * 0.66666));
@@ -809,7 +823,35 @@ void ACcurrentlimit()
     else
     {
       modulelimcur = parameters.currReq; // one module per phase, EVSE current limit is per phase
-    }    
+    }
+  }
+  /*
+    if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
+    {
+    modulelimcur = (dcaclim * 1.5);
+    }
+  */
+}
+
+void DCcurrentlimit()
+{
+  totdccur = 0; // 0.005Amp
+  for (int x = 0; x < 3; x++)
+  {
+    totdccur = totdccur + (dccur[x] * 0.1678466) ;
+  }
+
+  if (totdccur > maxdccur) //if dc current is higeher then allowed limit
+  {
+    dcaclim = dcaclim - 500;
+  }
+  else
+  {
+    dcaclim = dcaclim + 100;
+  }
+  if (maxaccur < dcaclim)
+  {
+    dcaclim = maxaccur;
   }
 }
 
