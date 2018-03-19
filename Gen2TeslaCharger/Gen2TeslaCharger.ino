@@ -65,8 +65,8 @@ byte Config = 1;
 
 //*********Charger Control VARIABLE   DATA ******************
 bool Vlimmode = true; // Set charges to voltage limit mode
-uint16_t modulelimcur = 0;
-uint16_t maxaccur, dcaclim = 16000; //maximum AC current in mA
+uint16_t modulelimcur,dcaclim = 0;
+uint16_t maxaccur = 16000; //maximum AC current in mA
 uint16_t maxdccur = 45000; //max DC current outputin mA
 
 
@@ -133,12 +133,14 @@ void setup()
 
   int filter;
   //extended
-  for (filter = 0; filter < 3; filter++) {
+  for (filter = 0; filter < 3; filter++)
+  {
     Can0.setRXFilter(filter, 0, 0, true);
     Can1.setRXFilter(filter, 0, 0, true);
   }
   //standard
-  for (int filter = 3; filter < 7; filter++) {
+  for (int filter = 3; filter < 7; filter++)
+  {
     Can0.setRXFilter(filter, 0, 0, false);
     Can1.setRXFilter(filter, 0, 0, false);
   }
@@ -163,6 +165,8 @@ void setup()
   pinMode(DIG_OUT_4, OUTPUT); //OP3
   pinMode(EVSE_ACTIVATE, OUTPUT); //pull Pilot to 6V
   ///////////////////////////////////////////////////////////////////////////////////////
+
+dcaclim = maxaccur;
 
   //delay(1000);                       // wait for a second
   //digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
@@ -201,6 +205,7 @@ void loop()
           setting = 1;
         }
         break;
+
       case 'm'://m for dc current setting in whole numbers
         if (Serial.available() > 0)
         {
@@ -208,6 +213,7 @@ void loop()
           setting = 1;
         }
         break;
+
       case 'v'://v for voltage setting in whole numbers
         if (Serial.available() > 0)
         {
@@ -215,6 +221,7 @@ void loop()
           setting = 1;
         }
         break;
+
       case 's'://s for start AND stop
         if (Serial.available() > 0)
         {
@@ -223,6 +230,7 @@ void loop()
           digitalWrite(LED_BUILTIN, HIGH);
         }
         break;
+
       case 'e'://e for enabling chargers followed by numbers to indicate which ones to run
         if (Serial.available() > 0)
         {
@@ -230,6 +238,7 @@ void loop()
           setting = 1;
         }
         break;
+
       case 'c': //c for current setting in whole numbers
         if (Serial.available() > 0)
         {
@@ -237,6 +246,7 @@ void loop()
           setting = 1;
         }
         break;
+
       default:
         // if nothing else matches, do the default
         // default is optional
@@ -282,51 +292,59 @@ void loop()
   switch (state)
   {
     case 0: //Charger off
-      bChargerEnabled = false;
-      digitalWrite(DIG_OUT_1, LOW);//MAINS OFF
-      delay(10);
-      digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
-      digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph2 deactivate
-      digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph3 deactivate
-      break;
-    case 1://Charger on
-      bChargerEnabled = true;
-      switch (parameters.enabledChargers)
+      if (bChargerEnabled == true)
       {
-        case 1:
-          digitalWrite(CHARGER1_ACTIVATE, HIGH);
-          break;
-        case 2:
-          digitalWrite(CHARGER2_ACTIVATE, HIGH);
-          break;
-        case 3:
-          digitalWrite(CHARGER3_ACTIVATE, HIGH);
-          break;
-        case 12:
-          digitalWrite(CHARGER1_ACTIVATE, HIGH);
-          digitalWrite(CHARGER2_ACTIVATE, HIGH);
-          break;
-        case 13:
-          digitalWrite(CHARGER1_ACTIVATE, HIGH);
-          digitalWrite(CHARGER3_ACTIVATE, HIGH);
-          break;
-        case 123:
-          digitalWrite(CHARGER1_ACTIVATE, HIGH);
-          digitalWrite(CHARGER2_ACTIVATE, HIGH);
-          digitalWrite(CHARGER3_ACTIVATE, HIGH);
-          break;
-        case 23:
-          digitalWrite(CHARGER2_ACTIVATE, HIGH);
-          digitalWrite(CHARGER3_ACTIVATE, HIGH);
-          break;
-        default:
-          // if nothing else matches, do the default
-          // default is optional
-          break;
+        bChargerEnabled = false;
+        digitalWrite(DIG_OUT_1, LOW);//MAINS OFF
+        delay(10);
+        digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
+        digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph2 deactivate
+        digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph3 deactivate
       }
-      delay(100);
-      digitalWrite(DIG_OUT_1, HIGH);//MAINS ON
       break;
+
+    case 1://Charger on
+      if (bChargerEnabled == false)
+      {
+        bChargerEnabled = true;
+        switch (parameters.enabledChargers)
+        {
+          case 1:
+            digitalWrite(CHARGER1_ACTIVATE, HIGH);
+            break;
+          case 2:
+            digitalWrite(CHARGER2_ACTIVATE, HIGH);
+            break;
+          case 3:
+            digitalWrite(CHARGER3_ACTIVATE, HIGH);
+            break;
+          case 12:
+            digitalWrite(CHARGER1_ACTIVATE, HIGH);
+            digitalWrite(CHARGER2_ACTIVATE, HIGH);
+            break;
+          case 13:
+            digitalWrite(CHARGER1_ACTIVATE, HIGH);
+            digitalWrite(CHARGER3_ACTIVATE, HIGH);
+            break;
+          case 123:
+            digitalWrite(CHARGER1_ACTIVATE, HIGH);
+            digitalWrite(CHARGER2_ACTIVATE, HIGH);
+            digitalWrite(CHARGER3_ACTIVATE, HIGH);
+            break;
+          case 23:
+            digitalWrite(CHARGER2_ACTIVATE, HIGH);
+            digitalWrite(CHARGER3_ACTIVATE, HIGH);
+            break;
+          default:
+            // if nothing else matches, do the default
+            // default is optional
+            break;
+        }
+        delay(100);
+        digitalWrite(DIG_OUT_1, HIGH);//MAINS ON
+      }
+      break;
+
     default:
       // if nothing else matches, do the default
       break;
@@ -407,6 +425,8 @@ void loop()
       Serial.print(modulelimcur / 1.5, 0);
       Serial.print(" DC AC Cur Lim: ");
       Serial.print(dcaclim);
+      Serial.print(" DC total Cur:");
+      Serial.print(totdccur*0.005,2);
     }
     DCcurrentlimit();
   }
@@ -586,22 +606,19 @@ void candecode(CAN_FRAME &frame)
       newframe = newframe | 1;
       break;
     case 0x227: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
-      dccur[0] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233 ;
+      dccur[0] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) ;//* 0.000839233 convert in rest of code
       dcvolt[0] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.01052864; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
     case 0x229: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
-      dccur[1] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
+      dccur[1] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) ;//* 0.000839233 convert in rest of code
       dcvolt[1] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.01052864; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
       break;
     case 0x22B: //dc feedback. Phase 1 measured DC battery current and voltage Charger phase 2 msg : 0x229. Charger phase 3 mesg : 0x22B
-      dccur[2] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) * 0.000839233;
+      dccur[2] = ((frame.data.bytes[5] << 8) + frame.data.bytes[4]) ;//* 0.000839233 convert in rest of code
       dcvolt[2] = ((frame.data.bytes[3] << 8) + frame.data.bytes[2]) * 0.010528564; //we left shift 8 bits to make a 16bit uint.
       newframe = newframe | 2;
-      Serial.println();
-      Serial.print(dccur[2]);
-      Serial.println();
       break;
 
     default:
@@ -841,7 +858,7 @@ void DCcurrentlimit()
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
   }
 
-  if (totdccur > maxdccur) //if dc current is higeher then allowed limit
+  if ((totdccur*5) > maxdccur) //if dc current is higeher then allowed limit
   {
     dcaclim = dcaclim - 500;
   }
