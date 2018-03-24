@@ -38,7 +38,7 @@ uint16_t curset = 0;
 int  setting = 1;
 int incomingByte = 0;
 int state;
-unsigned long tlast = 0;
+unsigned long tlast, tcan = 0;
 bool bChargerEnabled;
 
 //*********EVSE VARIABLE   DATA ******************
@@ -65,7 +65,7 @@ byte Config = 1;
 
 //*********Charger Control VARIABLE   DATA ******************
 bool Vlimmode = true; // Set charges to voltage limit mode
-uint16_t modulelimcur,dcaclim = 0;
+uint16_t modulelimcur, dcaclim = 0;
 uint16_t maxaccur = 16000; //maximum AC current in mA
 uint16_t maxdccur = 45000; //max DC current outputin mA
 
@@ -112,7 +112,8 @@ void setup()
     parameters.enabledChargers = 123; // enable per phase - 123 is all phases - 3 is just phase 3
     parameters.mainsRelay = 48;
     parameters.voltSet = 32000;
-    parameters.autoEnableCharger = 0; //don't auto enable it by default
+    parameters.autoEnableCharger = 0; //disable auto start, proximity and pilot control
+    parameters.canControl = 0; //disabled can control
     EEPROM.write(0, parameters);
   }
 
@@ -158,6 +159,11 @@ void setup()
   pinMode(CHARGER3_ACTIVATE, OUTPUT); //CHG3 ACTIVATE
   //////////////////////////////////////////////////////////////////////////////////////
 
+
+  pinMode(DIG_IN_1, INPUT); //IP1
+  pinMode(DIG_IN_2, INPUT); //IP2
+  //////////////////////////////////////////////////////////////////////////////////////
+
   //////////////DIGITAL OUTPUTS MAPPED TO X046. 10 PIN CONNECTOR ON LEFT//////////////////////////////////////////
   pinMode(DIG_OUT_1, OUTPUT); //OP1 - X046 PIN 6
   pinMode(DIG_OUT_2, OUTPUT); //OP2
@@ -166,7 +172,7 @@ void setup()
   pinMode(EVSE_ACTIVATE, OUTPUT); //pull Pilot to 6V
   ///////////////////////////////////////////////////////////////////////////////////////
 
-dcaclim = maxaccur;
+  dcaclim = maxaccur;
 
   //delay(1000);                       // wait for a second
   //digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
@@ -188,19 +194,37 @@ void loop()
     candecode(incoming);
   }
 
+  if (Can1.available())
+  {
+    Can1.read(incoming);
+    canextdecode(incoming);
+  }
+
   if (Serial.available())
   {
     incomingByte = Serial.read(); // read the incoming byte:
 
     switch (incomingByte)
     {
-      case 'a'://v for voltage setting in whole numbers
+      case 'a'://a for auto enable
         if (Serial.available() > 0)
         {
           parameters.autoEnableCharger = Serial.parseInt();
           if (parameters.autoEnableCharger > 1)
           {
             parameters.autoEnableCharger = 0;
+          }
+          setting = 1;
+        }
+        break;
+
+      case 'x'://a for can control enable
+        if (Serial.available() > 0)
+        {
+          parameters.canControl = Serial.parseInt();
+          if (parameters.canControl > 1)
+          {
+            parameters.canControl = 0;
           }
           setting = 1;
         }
@@ -288,6 +312,13 @@ void loop()
     Serial.println();
     Serial.println();
   }
+  if (parameters.canControl == 1)
+  {
+    if (millis() - tcan > 500)
+    {
+      state = 0;
+    }
+  }
 
   switch (state)
   {
@@ -304,44 +335,52 @@ void loop()
       break;
 
     case 1://Charger on
-      if (bChargerEnabled == false)
+      if (digitalRead(DIG_IN_1) == HIGH)
       {
-        bChargerEnabled = true;
-        switch (parameters.enabledChargers)
+        if (bChargerEnabled == false)
         {
-          case 1:
-            digitalWrite(CHARGER1_ACTIVATE, HIGH);
-            break;
-          case 2:
-            digitalWrite(CHARGER2_ACTIVATE, HIGH);
-            break;
-          case 3:
-            digitalWrite(CHARGER3_ACTIVATE, HIGH);
-            break;
-          case 12:
-            digitalWrite(CHARGER1_ACTIVATE, HIGH);
-            digitalWrite(CHARGER2_ACTIVATE, HIGH);
-            break;
-          case 13:
-            digitalWrite(CHARGER1_ACTIVATE, HIGH);
-            digitalWrite(CHARGER3_ACTIVATE, HIGH);
-            break;
-          case 123:
-            digitalWrite(CHARGER1_ACTIVATE, HIGH);
-            digitalWrite(CHARGER2_ACTIVATE, HIGH);
-            digitalWrite(CHARGER3_ACTIVATE, HIGH);
-            break;
-          case 23:
-            digitalWrite(CHARGER2_ACTIVATE, HIGH);
-            digitalWrite(CHARGER3_ACTIVATE, HIGH);
-            break;
-          default:
-            // if nothing else matches, do the default
-            // default is optional
-            break;
+          bChargerEnabled = true;
+          switch (parameters.enabledChargers)
+          {
+            case 1:
+              digitalWrite(CHARGER1_ACTIVATE, HIGH);
+              break;
+            case 2:
+              digitalWrite(CHARGER2_ACTIVATE, HIGH);
+              break;
+            case 3:
+              digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              break;
+            case 12:
+              digitalWrite(CHARGER1_ACTIVATE, HIGH);
+              digitalWrite(CHARGER2_ACTIVATE, HIGH);
+              break;
+            case 13:
+              digitalWrite(CHARGER1_ACTIVATE, HIGH);
+              digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              break;
+            case 123:
+              digitalWrite(CHARGER1_ACTIVATE, HIGH);
+              digitalWrite(CHARGER2_ACTIVATE, HIGH);
+              digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              break;
+            case 23:
+              digitalWrite(CHARGER2_ACTIVATE, HIGH);
+              digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              break;
+            default:
+              // if nothing else matches, do the default
+              // default is optional
+              break;
+          }
+          delay(100);
+          digitalWrite(DIG_OUT_1, HIGH);//MAINS ON
         }
-        delay(100);
-        digitalWrite(DIG_OUT_1, HIGH);//MAINS ON
+      }
+      else
+      {
+        bChargerEnabled == false;
+        state = 0;
       }
       break;
 
@@ -361,12 +400,21 @@ void loop()
         Serial.print(millis());
         if (bChargerEnabled)
         {
-          Serial.println(" ON  ");
+          Serial.print(" ON  ");
         }
         else
         {
-          Serial.println(" OFF ");
+          Serial.print(" OFF ");
         }
+        if (digitalRead(DIG_IN_1) == HIGH)
+        {
+          Serial.print(" Din 1 High");
+        }
+        else
+        {
+          Serial.print(" Din 1 Low");
+        }
+        Serial.println();
 
         for (int x = 0; x < 3; x++)
         {
@@ -397,7 +445,6 @@ void loop()
           Serial.print(" Stat:");
           Serial.print(ModStat[x], BIN);
           Serial.println();
-
         }
       }
     }
@@ -426,7 +473,7 @@ void loop()
       Serial.print(" DC AC Cur Lim: ");
       Serial.print(dcaclim);
       Serial.print(" DC total Cur:");
-      Serial.print(totdccur*0.005,2);
+      Serial.print(totdccur * 0.005, 2);
     }
     DCcurrentlimit();
   }
@@ -858,7 +905,7 @@ void DCcurrentlimit()
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
   }
 
-  if ((totdccur*5) > maxdccur) //if dc current is higeher then allowed limit
+  if ((totdccur * 5) > maxdccur) //if dc current is higeher then allowed limit
   {
     dcaclim = dcaclim - 500;
   }
@@ -870,5 +917,28 @@ void DCcurrentlimit()
   {
     dcaclim = maxaccur;
   }
+}
+
+void canextdecode(CAN_FRAME &frame)
+{
+  int x = 0;
+  if (parameters.canControl == 1)
+  {
+    if (ControlID == frame.id) //Charge Control message
+    {
+      if (frame.data.bytes[0] == 0x01)
+      {
+        state = 1;
+      }
+      else
+      {
+        state = 0;
+      }
+      parameters.voltSet = (frame.data.bytes[1] << 8) + frame.data.bytes[2];
+      maxdccur = (frame.data.bytes[3] << 8) + frame.data.bytes[4];
+      tcan = millis();
+    }
+  }
+
 }
 
