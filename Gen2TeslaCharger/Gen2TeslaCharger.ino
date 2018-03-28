@@ -111,7 +111,7 @@ void setup()
     parameters.currReq = 0; //max input limit per module 1500 = 1A
     parameters.enabledChargers = 123; // enable per phase - 123 is all phases - 3 is just phase 3
     parameters.mainsRelay = 48;
-    parameters.voltSet = 32000;
+    parameters.voltSet = 32000; 1 = 0.01V
     parameters.autoEnableCharger = 0; //disable auto start, proximity and pilot control
     parameters.canControl = 0; //disabled can control
     EEPROM.write(0, parameters);
@@ -174,10 +174,10 @@ void setup()
 
   dcaclim = maxaccur;
 
-  //delay(1000);                       // wait for a second
-  //digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
-  //delay(1000);                       // wait for a second
-  //digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
+  delay(1000);                       // wait for a second
+  digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
+  delay(1000);                       // wait for a second
+  digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
   delay(1000);                       // wait for a second
   digitalWrite(CHARGER3_ENABLE, HIGH);//enable phase 3 power module
 
@@ -327,10 +327,11 @@ void loop()
       {
         bChargerEnabled = false;
         digitalWrite(DIG_OUT_1, LOW);//MAINS OFF
+        digitalWrite(EVSE_ACTIVATE, LOW);
         delay(10);
         digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
-        digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph2 deactivate
-        digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph3 deactivate
+        digitalWrite(CHARGER2_ACTIVATE, LOW); //chargeph2 deactivate
+        digitalWrite(CHARGER3_ACTIVATE, LOW); //chargeph3 deactivate
       }
       break;
 
@@ -375,6 +376,7 @@ void loop()
           }
           delay(100);
           digitalWrite(DIG_OUT_1, HIGH);//MAINS ON
+          digitalWrite(EVSE_ACTIVATE, HIGH);
         }
       }
       else
@@ -484,7 +486,7 @@ void loop()
     evseread();
     if (Proximity == Connected) //check if plugged in
     {
-      digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
+      //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
 
 
       if (modulelimcur > 1400) // one amp or more active modules
@@ -493,7 +495,7 @@ void loop()
       }
       else // unplugged or buton pressed stop charging
       {
-        state = 0;
+        //state = 0;
       }
     }
     else // unplugged or buton pressed stop charging
