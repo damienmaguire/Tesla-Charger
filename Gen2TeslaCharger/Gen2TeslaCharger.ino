@@ -35,6 +35,7 @@ bool bChargerEnabled;
 //*********EVSE VARIABLE   DATA ******************
 byte Proximity = 0;
 int Type = 2;
+uint16_t ACvoltIN = 240; // AC input voltage 240VAC for EU/UK and 110VAC for US
 //proximity status values for type 1
 #define Unconnected 0 // 3.3V
 #define Buttonpress 1 // 2.3V
@@ -288,9 +289,9 @@ void loop()
     Serial.print(parameters.enabledChargers);
     Serial.print("Set voltage : ");
     Serial.print(parameters.voltSet * 0.01f, 0);
-    Serial.print("V | Set current : ");
+    Serial.print("V | Set current lim AC : ");
     Serial.print(parameters.currReq * 0.00066666, 0);
-    Serial.print(" A ");
+    Serial.print(" A DC :");
     Serial.print(maxdccur * 0.001, 1);
     Serial.print(" A ");
     if (parameters.autoEnableCharger == 1)
@@ -428,6 +429,8 @@ void loop()
           Serial.print(acvolt[x]);
           Serial.print("  AC cur: ");
           Serial.print((accur[x] * 0.06666), 2);
+          Serial.print("  ");
+          Serial.print(accur[x]);
           Serial.print("  DC volt: ");
           Serial.print(dcvolt[x]);
           Serial.print("  DC cur: ");
@@ -563,7 +566,7 @@ void candecode(CAN_FRAME &frame)
 
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] & 112) >> 6) ;
+      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -595,7 +598,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] & 112) >> 6) ;
+      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -627,7 +630,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] & 112) >> 6) ;
+      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -717,7 +720,7 @@ void Charger_msgs()
   }
   else
   {
-    outframe.data.bytes[1] = 0x60;
+    outframe.data.bytes[1] = lowByte(uint16_t(ACvoltIN/1.2));
     outframe.data.bytes[4] = 0x64;
   }
   outframe.data.bytes[5] = 0x00;
