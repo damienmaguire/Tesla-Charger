@@ -1,19 +1,10 @@
 /*
   Tesla Gen 2 Charger Control Program
   2017-2018
+  T de Bree
   D.Maguire
-  Tweaks by T de Bree
   Additional work by C. Kidder
   Runs on OpenSource Logic board V2 in Gen2 charger. Commands all modules.
-  "s" starts or stops charging
-
-  "v" sets voltage setpoint
-
-  "c" sets charge current. WARNING! this current will be pumped out by all modules equally.
-  So if you set 5Amps you will get 5 amps from all modules (if they have mains) for a total
-  of 15A into the battery.
-
-  "r" sets ramp time in milliseconds. r500 sets 500ms ramp time.
 */
 
 #include <can_common.h>
@@ -38,12 +29,13 @@ uint16_t curset = 0;
 int  setting = 1;
 int incomingByte = 0;
 int state;
-unsigned long tlast = 0;
+unsigned long tlast, tcan = 0;
 bool bChargerEnabled;
 
 //*********EVSE VARIABLE   DATA ******************
 byte Proximity = 0;
 int Type = 2;
+uint16_t ACvoltIN = 240; // AC input voltage 240VAC for EU/UK and 110VAC for US
 //proximity status values for type 1
 #define Unconnected 0 // 3.3V
 #define Buttonpress 1 // 2.3V
@@ -65,9 +57,10 @@ byte Config = 1;
 
 //*********Charger Control VARIABLE   DATA ******************
 bool Vlimmode = true; // Set charges to voltage limit mode
-uint16_t modulelimcur,dcaclim = 0;
+uint16_t modulelimcur, dcaclim = 0;
 uint16_t maxaccur = 16000; //maximum AC current in mA
 uint16_t maxdccur = 45000; //max DC current outputin mA
+int activemodules = 0;
 
 
 
@@ -75,8 +68,9 @@ uint16_t maxdccur = 45000; //max DC current outputin mA
 uint16_t dcvolt[3] = {0, 0, 0};//1 = 1V
 uint16_t dccur[3] = {0, 0, 0};
 uint16_t totdccur = 0;//1 = 0.005Amp
-uint16_t acvolt[3] = {0, 0, 0};//1 = 0.06666 Amp
-uint16_t accur[3] = {0, 0, 0};
+uint16_t acvolt[3] = {0, 0, 0};//1 = 1V
+uint16_t accur[3] = {0, 0, 0};//1 = 0.06666 Amp
+long acpower = 0;
 byte inlettarg [3] = {0, 0, 0}; //inlet target temperatures, should be used to command cooling.
 byte curtemplim [3] = {0, 0, 0};//current limit due to temperature
 byte templeg[2][3] = {{0, 0, 0}, {0, 0, 0}}; //temperatures reported back
@@ -111,8 +105,9 @@ void setup()
     parameters.currReq = 0; //max input limit per module 1500 = 1A
     parameters.enabledChargers = 123; // enable per phase - 123 is all phases - 3 is just phase 3
     parameters.mainsRelay = 48;
-    parameters.voltSet = 32000;
-    parameters.autoEnableCharger = 0; //don't auto enable it by default
+    parameters.voltSet = 32000; //1 = 0.01V
+    parameters.autoEnableCharger = 0; //disable auto start, proximity and pilot control
+    parameters.canControl = 0; //disabled can control
     EEPROM.write(0, parameters);
   }
 
@@ -158,6 +153,11 @@ void setup()
   pinMode(CHARGER3_ACTIVATE, OUTPUT); //CHG3 ACTIVATE
   //////////////////////////////////////////////////////////////////////////////////////
 
+
+  pinMode(DIG_IN_1, INPUT); //IP1
+  pinMode(DIG_IN_2, INPUT); //IP2
+  //////////////////////////////////////////////////////////////////////////////////////
+
   //////////////DIGITAL OUTPUTS MAPPED TO X046. 10 PIN CONNECTOR ON LEFT//////////////////////////////////////////
   pinMode(DIG_OUT_1, OUTPUT); //OP1 - X046 PIN 6
   pinMode(DIG_OUT_2, OUTPUT); //OP2
@@ -166,12 +166,12 @@ void setup()
   pinMode(EVSE_ACTIVATE, OUTPUT); //pull Pilot to 6V
   ///////////////////////////////////////////////////////////////////////////////////////
 
-dcaclim = maxaccur;
+  dcaclim = maxaccur;
 
-  //delay(1000);                       // wait for a second
-  //digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
-  //delay(1000);                       // wait for a second
-  //digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
+  delay(1000);                       // wait for a second
+  digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
+  delay(1000);                       // wait for a second
+  digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
   delay(1000);                       // wait for a second
   digitalWrite(CHARGER3_ENABLE, HIGH);//enable phase 3 power module
 
@@ -188,19 +188,37 @@ void loop()
     candecode(incoming);
   }
 
+  if (Can1.available())
+  {
+    Can1.read(incoming);
+    canextdecode(incoming);
+  }
+
   if (Serial.available())
   {
     incomingByte = Serial.read(); // read the incoming byte:
 
     switch (incomingByte)
     {
-      case 'a'://v for voltage setting in whole numbers
+      case 'a'://a for auto enable
         if (Serial.available() > 0)
         {
           parameters.autoEnableCharger = Serial.parseInt();
           if (parameters.autoEnableCharger > 1)
           {
             parameters.autoEnableCharger = 0;
+          }
+          setting = 1;
+        }
+        break;
+
+      case 'x'://a for can control enable
+        if (Serial.available() > 0)
+        {
+          parameters.canControl = Serial.parseInt();
+          if (parameters.canControl > 1)
+          {
+            parameters.canControl = 0;
           }
           setting = 1;
         }
@@ -271,9 +289,9 @@ void loop()
     Serial.print(parameters.enabledChargers);
     Serial.print("Set voltage : ");
     Serial.print(parameters.voltSet * 0.01f, 0);
-    Serial.print("V | Set current : ");
+    Serial.print("V | Set current lim AC : ");
     Serial.print(parameters.currReq * 0.00066666, 0);
-    Serial.print(" A ");
+    Serial.print(" A DC :");
     Serial.print(maxdccur * 0.001, 1);
     Serial.print(" A ");
     if (parameters.autoEnableCharger == 1)
@@ -288,6 +306,13 @@ void loop()
     Serial.println();
     Serial.println();
   }
+  if (parameters.canControl == 1)
+  {
+    if (millis() - tcan > 500)
+    {
+      state = 0;
+    }
+  }
 
   switch (state)
   {
@@ -296,52 +321,69 @@ void loop()
       {
         bChargerEnabled = false;
         digitalWrite(DIG_OUT_1, LOW);//MAINS OFF
+        digitalWrite(EVSE_ACTIVATE, LOW);
         delay(10);
         digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
-        digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph2 deactivate
-        digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph3 deactivate
+        digitalWrite(CHARGER2_ACTIVATE, LOW); //chargeph2 deactivate
+        digitalWrite(CHARGER3_ACTIVATE, LOW); //chargeph3 deactivate
       }
       break;
 
     case 1://Charger on
-      if (bChargerEnabled == false)
+      if (digitalRead(DIG_IN_1) == HIGH)
       {
-        bChargerEnabled = true;
-        switch (parameters.enabledChargers)
+        if (bChargerEnabled == false)
         {
-          case 1:
-            digitalWrite(CHARGER1_ACTIVATE, HIGH);
-            break;
-          case 2:
-            digitalWrite(CHARGER2_ACTIVATE, HIGH);
-            break;
-          case 3:
-            digitalWrite(CHARGER3_ACTIVATE, HIGH);
-            break;
-          case 12:
-            digitalWrite(CHARGER1_ACTIVATE, HIGH);
-            digitalWrite(CHARGER2_ACTIVATE, HIGH);
-            break;
-          case 13:
-            digitalWrite(CHARGER1_ACTIVATE, HIGH);
-            digitalWrite(CHARGER3_ACTIVATE, HIGH);
-            break;
-          case 123:
-            digitalWrite(CHARGER1_ACTIVATE, HIGH);
-            digitalWrite(CHARGER2_ACTIVATE, HIGH);
-            digitalWrite(CHARGER3_ACTIVATE, HIGH);
-            break;
-          case 23:
-            digitalWrite(CHARGER2_ACTIVATE, HIGH);
-            digitalWrite(CHARGER3_ACTIVATE, HIGH);
-            break;
-          default:
-            // if nothing else matches, do the default
-            // default is optional
-            break;
+          bChargerEnabled = true;
+          switch (parameters.enabledChargers)
+          {
+            case 1:
+              digitalWrite(CHARGER1_ACTIVATE, HIGH);
+              activemodules = 1;
+              break;
+            case 2:
+              digitalWrite(CHARGER2_ACTIVATE, HIGH);
+              activemodules = 1;
+              break;
+            case 3:
+              digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              activemodules = 1;
+              break;
+            case 12:
+              digitalWrite(CHARGER1_ACTIVATE, HIGH);
+              digitalWrite(CHARGER2_ACTIVATE, HIGH);
+              activemodules = 2;
+              break;
+            case 13:
+              digitalWrite(CHARGER1_ACTIVATE, HIGH);
+              digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              activemodules = 2;
+              break;
+            case 123:
+              digitalWrite(CHARGER1_ACTIVATE, HIGH);
+              digitalWrite(CHARGER2_ACTIVATE, HIGH);
+              digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              activemodules = 3;
+              break;
+            case 23:
+              digitalWrite(CHARGER2_ACTIVATE, HIGH);
+              digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              activemodules = 2;
+              break;
+            default:
+              // if nothing else matches, do the default
+              // default is optional
+              break;
+          }
+          delay(100);
+          digitalWrite(DIG_OUT_1, HIGH);//MAINS ON
+          digitalWrite(EVSE_ACTIVATE, HIGH);
         }
-        delay(100);
-        digitalWrite(DIG_OUT_1, HIGH);//MAINS ON
+      }
+      else
+      {
+        bChargerEnabled == false;
+        state = 0;
       }
       break;
 
@@ -361,12 +403,21 @@ void loop()
         Serial.print(millis());
         if (bChargerEnabled)
         {
-          Serial.println(" ON  ");
+          Serial.print(" ON  ");
         }
         else
         {
-          Serial.println(" OFF ");
+          Serial.print(" OFF ");
         }
+        if (digitalRead(DIG_IN_1) == HIGH)
+        {
+          Serial.print(" Din 1 High");
+        }
+        else
+        {
+          Serial.print(" Din 1 Low");
+        }
+        Serial.println();
 
         for (int x = 0; x < 3; x++)
         {
@@ -378,6 +429,8 @@ void loop()
           Serial.print(acvolt[x]);
           Serial.print("  AC cur: ");
           Serial.print((accur[x] * 0.06666), 2);
+          Serial.print("  ");
+          Serial.print(accur[x]);
           Serial.print("  DC volt: ");
           Serial.print(dcvolt[x]);
           Serial.print("  DC cur: ");
@@ -397,7 +450,6 @@ void loop()
           Serial.print(" Stat:");
           Serial.print(ModStat[x], BIN);
           Serial.println();
-
         }
       }
     }
@@ -425,11 +477,14 @@ void loop()
       Serial.print(modulelimcur / 1.5, 0);
       Serial.print(" DC AC Cur Lim: ");
       Serial.print(dcaclim);
+      Serial.print(" Active: ");
+      Serial.print(activemodules);
       Serial.print(" DC total Cur:");
-      Serial.print(totdccur*0.005,2);
+      Serial.print(totdccur * 0.005, 2);
     }
-    DCcurrentlimit();
+
   }
+  DCcurrentlimit();
   ACcurrentlimit();
 
   if (parameters.autoEnableCharger == 1)
@@ -437,7 +492,7 @@ void loop()
     evseread();
     if (Proximity == Connected) //check if plugged in
     {
-      digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
+      //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
 
 
       if (modulelimcur > 1400) // one amp or more active modules
@@ -446,7 +501,7 @@ void loop()
       }
       else // unplugged or buton pressed stop charging
       {
-        state = 0;
+        //state = 0;
       }
     }
     else // unplugged or buton pressed stop charging
@@ -511,7 +566,7 @@ void candecode(CAN_FRAME &frame)
 
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] & 112) >> 6) ;
+      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -543,7 +598,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] & 112) >> 6) ;
+      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -575,7 +630,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] & 112) >> 6) ;
+      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -665,7 +720,7 @@ void Charger_msgs()
   }
   else
   {
-    outframe.data.bytes[1] = 0x60;
+    outframe.data.bytes[1] = lowByte(uint16_t(ACvoltIN/1.2));
     outframe.data.bytes[4] = 0x64;
   }
   outframe.data.bytes[5] = 0x00;
@@ -842,33 +897,49 @@ void ACcurrentlimit()
       modulelimcur = parameters.currReq; // one module per phase, EVSE current limit is per phase
     }
   }
-  /*
-    if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
-    {
+  if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
+  {
     modulelimcur = (dcaclim * 1.5);
-    }
-  */
+  }
 }
 
 void DCcurrentlimit()
 {
-  totdccur = 0; // 0.005Amp
+  totdccur = 1; // 0.005Amp
+  activemodules = 0;
   for (int x = 0; x < 3; x++)
   {
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
+    if (acvolt[x] >50 && dcvolt[x] > 50)
+    {
+      activemodules++;
+    }
+  }
+  dcaclim = 0;
+  int x = 2;
+  dcaclim = ((dcvolt[x] * (maxdccur+400)) / acvolt[x]) / activemodules;
+}
+
+void canextdecode(CAN_FRAME &frame)
+{
+  int x = 0;
+  if (parameters.canControl == 1)
+  {
+    if (ControlID == frame.id) //Charge Control message
+    {
+      if (frame.data.bytes[0] == 0x01)
+      {
+        state = 1;
+      }
+      else
+      {
+        state = 0;
+      }
+      parameters.voltSet = (frame.data.bytes[1] << 8) + frame.data.bytes[2];
+      maxdccur = (frame.data.bytes[3] << 8) + frame.data.bytes[4];
+      tcan = millis();
+    }
   }
 
-  if ((totdccur*5) > maxdccur) //if dc current is higeher then allowed limit
-  {
-    dcaclim = dcaclim - 500;
-  }
-  else
-  {
-    dcaclim = dcaclim + 100;
-  }
-  if (maxaccur < dcaclim)
-  {
-    dcaclim = maxaccur;
-  }
 }
 
