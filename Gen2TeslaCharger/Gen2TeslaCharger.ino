@@ -1,19 +1,10 @@
 /*
   Tesla Gen 2 Charger Control Program
   2017-2018
+  T de Bree
   D.Maguire
-  Tweaks by T de Bree
   Additional work by C. Kidder
   Runs on OpenSource Logic board V2 in Gen2 charger. Commands all modules.
-  "s" starts or stops charging
-
-  "v" sets voltage setpoint
-
-  "c" sets charge current. WARNING! this current will be pumped out by all modules equally.
-  So if you set 5Amps you will get 5 amps from all modules (if they have mains) for a total
-  of 15A into the battery.
-
-  "r" sets ramp time in milliseconds. r500 sets 500ms ramp time.
 */
 
 #include <can_common.h>
@@ -68,6 +59,7 @@ bool Vlimmode = true; // Set charges to voltage limit mode
 uint16_t modulelimcur, dcaclim = 0;
 uint16_t maxaccur = 16000; //maximum AC current in mA
 uint16_t maxdccur = 45000; //max DC current outputin mA
+int activemodules = 0;
 
 
 
@@ -75,8 +67,9 @@ uint16_t maxdccur = 45000; //max DC current outputin mA
 uint16_t dcvolt[3] = {0, 0, 0};//1 = 1V
 uint16_t dccur[3] = {0, 0, 0};
 uint16_t totdccur = 0;//1 = 0.005Amp
-uint16_t acvolt[3] = {0, 0, 0};//1 = 0.06666 Amp
-uint16_t accur[3] = {0, 0, 0};
+uint16_t acvolt[3] = {0, 0, 0};//1 = 1V
+uint16_t accur[3] = {0, 0, 0};//1 = 0.06666 Amp
+long acpower = 0;
 byte inlettarg [3] = {0, 0, 0}; //inlet target temperatures, should be used to command cooling.
 byte curtemplim [3] = {0, 0, 0};//current limit due to temperature
 byte templeg[2][3] = {{0, 0, 0}, {0, 0, 0}}; //temperatures reported back
@@ -111,7 +104,7 @@ void setup()
     parameters.currReq = 0; //max input limit per module 1500 = 1A
     parameters.enabledChargers = 123; // enable per phase - 123 is all phases - 3 is just phase 3
     parameters.mainsRelay = 48;
-    parameters.voltSet = 32000; 1 = 0.01V
+    parameters.voltSet = 32000; //1 = 0.01V
     parameters.autoEnableCharger = 0; //disable auto start, proximity and pilot control
     parameters.canControl = 0; //disabled can control
     EEPROM.write(0, parameters);
@@ -345,29 +338,36 @@ void loop()
           {
             case 1:
               digitalWrite(CHARGER1_ACTIVATE, HIGH);
+              activemodules = 1;
               break;
             case 2:
               digitalWrite(CHARGER2_ACTIVATE, HIGH);
+              activemodules = 1;
               break;
             case 3:
               digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              activemodules = 1;
               break;
             case 12:
               digitalWrite(CHARGER1_ACTIVATE, HIGH);
               digitalWrite(CHARGER2_ACTIVATE, HIGH);
+              activemodules = 2;
               break;
             case 13:
               digitalWrite(CHARGER1_ACTIVATE, HIGH);
               digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              activemodules = 2;
               break;
             case 123:
               digitalWrite(CHARGER1_ACTIVATE, HIGH);
               digitalWrite(CHARGER2_ACTIVATE, HIGH);
               digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              activemodules = 3;
               break;
             case 23:
               digitalWrite(CHARGER2_ACTIVATE, HIGH);
               digitalWrite(CHARGER3_ACTIVATE, HIGH);
+              activemodules = 2;
               break;
             default:
               // if nothing else matches, do the default
@@ -474,11 +474,14 @@ void loop()
       Serial.print(modulelimcur / 1.5, 0);
       Serial.print(" DC AC Cur Lim: ");
       Serial.print(dcaclim);
+      Serial.print(" Active: ");
+      Serial.print(activemodules);
       Serial.print(" DC total Cur:");
       Serial.print(totdccur * 0.005, 2);
     }
-    DCcurrentlimit();
+
   }
+  DCcurrentlimit();
   ACcurrentlimit();
 
   if (parameters.autoEnableCharger == 1)
@@ -891,34 +894,27 @@ void ACcurrentlimit()
       modulelimcur = parameters.currReq; // one module per phase, EVSE current limit is per phase
     }
   }
-  /*
-    if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
-    {
+  if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
+  {
     modulelimcur = (dcaclim * 1.5);
-    }
-  */
+  }
 }
 
 void DCcurrentlimit()
 {
-  totdccur = 0; // 0.005Amp
+  totdccur = 1; // 0.005Amp
+  activemodules = 0;
   for (int x = 0; x < 3; x++)
   {
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
+    if (acvolt[x] >50 && dcvolt[x] > 50)
+    {
+      activemodules++;
+    }
   }
-
-  if ((totdccur * 5) > maxdccur) //if dc current is higeher then allowed limit
-  {
-    dcaclim = dcaclim - 500;
-  }
-  else
-  {
-    dcaclim = dcaclim + 100;
-  }
-  if (maxaccur < dcaclim)
-  {
-    dcaclim = maxaccur;
-  }
+  dcaclim = 0;
+  int x = 2;
+  dcaclim = ((dcvolt[x] * (maxdccur+400)) / acvolt[x]) / activemodules;
 }
 
 void canextdecode(CAN_FRAME &frame)
