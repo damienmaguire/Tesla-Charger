@@ -897,10 +897,12 @@ void ACcurrentlimit()
       modulelimcur = parameters.currReq; // one module per phase, EVSE current limit is per phase
     }
   }
+  /*
   if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
   {
     modulelimcur = (dcaclim * 1.5);
   }
+  */
 }
 
 void DCcurrentlimit()
