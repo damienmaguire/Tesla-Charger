@@ -566,7 +566,7 @@ void candecode(CAN_FRAME &frame)
 
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
+      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6)) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -598,7 +598,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
+      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6)) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -630,7 +630,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
+      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6)) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
