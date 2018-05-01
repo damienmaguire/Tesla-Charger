@@ -443,10 +443,10 @@ void loop()
     tlast = millis();
     if (debug != 0)
     {
-      if (newframe & 3 != 0)
-      {
         Serial.println();
         Serial.print(millis());
+        Serial.print(" State: ");
+        Serial.print(state);
         if (bChargerEnabled)
         {
           Serial.print(" ON  ");
@@ -463,8 +463,11 @@ void loop()
         {
           Serial.print(" Din 1 Low");
         }
+        
+        
+      if (bChargerEnabled)
+      {
         Serial.println();
-
         for (int x = 0; x < 3; x++)
         {
           Serial.print("  Phase ");
@@ -498,9 +501,16 @@ void loop()
           Serial.println();
         }
       }
+      else
+      {
+        Serial.println();
+        Serial.print("Modules Turned OFF");
+        Serial.println();
+      }
     }
     if (debugevse != 0)
     {
+      Serial.println();
       Serial.print("  Proximity Status : ");
       switch (Proximity)
       {
