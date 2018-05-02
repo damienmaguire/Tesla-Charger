@@ -33,4 +33,6 @@ Changed to a Vertical type B USB socket.
 
 28/02/18 : V3 design files released with grounds fixed. Also new S/W thanks to Tom DeBree released but untested as of today. Also pictures of mod required on V1 and V2 boards.
 
+02/05/18 : V3 board and new software tested and working in my BMW E31 project car.
+
 Enjoy!
