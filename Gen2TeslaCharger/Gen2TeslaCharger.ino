@@ -327,7 +327,6 @@ void loop()
         bChargerEnabled = false;
         digitalWrite(DIG_OUT_1, LOW);//MAINS OFF
         digitalWrite(EVSE_ACTIVATE, LOW);
-        delay(10);
         digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
         digitalWrite(CHARGER2_ACTIVATE, LOW); //chargeph2 deactivate
         digitalWrite(CHARGER3_ACTIVATE, LOW); //chargeph3 deactivate
@@ -861,13 +860,14 @@ void Charger_msgs()
   if (dcdcenable)
   {
     outframe.id = 0x3D8;
-    outframe.length = 2;            // Data payload 8 bytes
+    outframe.length = 3;            // Data payload 8 bytes
     outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
     outframe.rtr = 0;                 //No request
 
-    outframe.data.bytes[1] = highByte (uint16_t((parameters.dcdcsetpoint-9000)/6.8359375)<<6);
-    outframe.data.bytes[2] = lowByte (uint16_t((parameters.dcdcsetpoint-9000)/6.8359375)<<6);
-    outframe.data.bytes[2] = outframe.data.bytes[2] | 0x20;
+    outframe.data.bytes[0] = highByte (uint16_t((parameters.dcdcsetpoint-9000)/6.8359375)<<6);
+    outframe.data.bytes[1] = lowByte (uint16_t((parameters.dcdcsetpoint-9000)/6.8359375)<<6);
+    outframe.data.bytes[1] = outframe.data.bytes[1] | 0x20;
+    outframe.data.bytes[2] = 0x00;
     Can1.sendFrame(outframe);
   }
 }
