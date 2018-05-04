@@ -30,6 +30,7 @@ typedef struct
     uint16_t currReq;
     uint32_t can0Speed;
     uint32_t can1Speed;
+    uint16_t dcdcsetpoint;
 }   ChargerParams;
 
 #endif

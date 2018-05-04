@@ -29,7 +29,7 @@ uint16_t curset = 0;
 int  setting = 1;
 int incomingByte = 0;
 int state;
-unsigned long tlast, tcan = 0;
+unsigned long tlast, tcan, tboot = 0;
 bool bChargerEnabled;
 
 //*********EVSE VARIABLE   DATA ******************
@@ -82,6 +82,9 @@ int newframe = 0;
 
 ChargerParams parameters;
 
+//*********DCDC Messages VARIABLE   DATA ******************
+bool dcdcenable = 1; // turn on can messages for the DCDC.
+
 //*********Charger Messages VARIABLE   DATA ******************
 int ControlID = 0x300;
 int StatusID = 0x410;
@@ -108,6 +111,7 @@ void setup()
     parameters.voltSet = 32000; //1 = 0.01V
     parameters.autoEnableCharger = 0; //disable auto start, proximity and pilot control
     parameters.canControl = 0; //disabled can control
+    parameters.dcdcsetpoint = 14000; //voltage setpoint for dcdc in mv
     EEPROM.write(0, parameters);
   }
 
@@ -167,13 +171,6 @@ void setup()
   ///////////////////////////////////////////////////////////////////////////////////////
 
   dcaclim = maxaccur;
-
-  delay(1000);                       // wait for a second
-  digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
-  delay(1000);                       // wait for a second
-  digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
-  delay(1000);                       // wait for a second
-  digitalWrite(CHARGER3_ENABLE, HIGH);//enable phase 3 power module
 
   bChargerEnabled = false; //are we supposed to command the charger to charge?
 }
@@ -243,9 +240,17 @@ void loop()
       case 's'://s for start AND stop
         if (Serial.available() > 0)
         {
-          state = !state;
           setting = 1;
           digitalWrite(LED_BUILTIN, HIGH);
+          if (state == 0)
+          {
+            state = 2;// initialize modules
+            tboot = millis();
+          }
+          if (state == 1)
+          {
+            state = 0;// initialize modules
+          }
         }
         break;
 
@@ -322,10 +327,12 @@ void loop()
         bChargerEnabled = false;
         digitalWrite(DIG_OUT_1, LOW);//MAINS OFF
         digitalWrite(EVSE_ACTIVATE, LOW);
-        delay(10);
         digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
         digitalWrite(CHARGER2_ACTIVATE, LOW); //chargeph2 deactivate
         digitalWrite(CHARGER3_ACTIVATE, LOW); //chargeph3 deactivate
+        digitalWrite(CHARGER1_ENABLE, LOW);//disable phase 1 power module
+        digitalWrite(CHARGER2_ENABLE, LOW);//disable phase 2 power module
+        digitalWrite(CHARGER3_ENABLE, LOW);//disable phase 3 power module
       }
       break;
 
@@ -387,20 +394,58 @@ void loop()
       }
       break;
 
+    case 2:
+      switch (parameters.enabledChargers)
+      {
+        case 1:
+          digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
+          break;
+        case 2:
+          digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
+          break;
+        case 3:
+          digitalWrite(CHARGER3_ENABLE, HIGH);//enable phase 3 power module
+          break;
+        case 12:
+          digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
+          digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
+          break;
+        case 13:
+          digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
+          digitalWrite(CHARGER3_ENABLE, HIGH);//enable phase 3 power module
+          break;
+        case 123:
+          digitalWrite(CHARGER1_ENABLE, HIGH);//enable phase 1 power module
+          digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
+          digitalWrite(CHARGER3_ENABLE, HIGH);//enable phase 3 power module
+          break;
+        case 23:
+          digitalWrite(CHARGER2_ENABLE, HIGH);//enable phase 2 power module
+          digitalWrite(CHARGER3_ENABLE, HIGH);//enable phase 3 power module
+          break;
+
+        default:
+          // if nothing else matches, do the default
+          break;
+      }
+      if (tboot <  (millis() - 500))
+      {
+        state = 1;
+      }
+
     default:
       // if nothing else matches, do the default
       break;
   }
-
   if (tlast <  (millis() - 500))
   {
     tlast = millis();
     if (debug != 0)
     {
-      if (newframe & 3 != 0)
-      {
         Serial.println();
         Serial.print(millis());
+        Serial.print(" State: ");
+        Serial.print(state);
         if (bChargerEnabled)
         {
           Serial.print(" ON  ");
@@ -417,8 +462,11 @@ void loop()
         {
           Serial.print(" Din 1 Low");
         }
+        
+        
+      if (bChargerEnabled)
+      {
         Serial.println();
-
         for (int x = 0; x < 3; x++)
         {
           Serial.print("  Phase ");
@@ -452,9 +500,16 @@ void loop()
           Serial.println();
         }
       }
+      else
+      {
+        Serial.println();
+        Serial.print("Modules Turned OFF");
+        Serial.println();
+      }
     }
     if (debugevse != 0)
     {
+      Serial.println();
       Serial.print("  Proximity Status : ");
       switch (Proximity)
       {
@@ -487,24 +542,37 @@ void loop()
   DCcurrentlimit();
   ACcurrentlimit();
 
+  //EVSE automatic control
   if (parameters.autoEnableCharger == 1)
   {
-    evseread();
-    if (Proximity == Connected) //check if plugged in
+    if (digitalRead(DIG_IN_1) == HIGH)
     {
-      //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
-
-
-      if (modulelimcur > 1400) // one amp or more active modules
+      evseread();
+      if (Proximity == Connected) //check if plugged in
       {
-        state = 1;
+        //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
+
+
+        if (modulelimcur > 1400) // one amp or more active modules
+        {
+          if (state == 0)
+          {
+            state = 2;// initialize modules
+            tboot = millis();
+          }
+        }
+        else // unplugged or buton pressed stop charging
+        {
+          //state = 0;
+        }
       }
       else // unplugged or buton pressed stop charging
       {
-        //state = 0;
+        state = 0;
+        digitalWrite(EVSE_ACTIVATE, LOW);
       }
     }
-    else // unplugged or buton pressed stop charging
+    else
     {
       state = 0;
       digitalWrite(EVSE_ACTIVATE, LOW);
@@ -513,7 +581,7 @@ void loop()
 }
 
 
-void candecode(CAN_FRAME &frame)
+void candecode(CAN_FRAME & frame)
 {
   int x = 0;
   switch (frame.id)
@@ -566,7 +634,7 @@ void candecode(CAN_FRAME &frame)
 
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
+      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6)) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -598,7 +666,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
+      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6)) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -630,7 +698,7 @@ void candecode(CAN_FRAME &frame)
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6) ;
+      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6)) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -720,7 +788,7 @@ void Charger_msgs()
   }
   else
   {
-    outframe.data.bytes[1] = lowByte(uint16_t(ACvoltIN/1.2));
+    outframe.data.bytes[1] = lowByte(uint16_t(ACvoltIN / 1.2));
     outframe.data.bytes[4] = 0x64;
   }
   outframe.data.bytes[5] = 0x00;
@@ -748,7 +816,9 @@ void Charger_msgs()
   outframe.data.bytes[6] = 0x40;
   outframe.data.bytes[7] = 0xff;
   Can0.sendFrame(outframe);
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////
+  /*////////////////////////////////////////////////////////////////////////////////////////////////////////
+  External CAN
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////*/
   uint16_t y = 0;
   outframe.id = StatusID;
   outframe.length = 8;            // Data payload 8 bytes
@@ -786,6 +856,20 @@ void Charger_msgs()
   outframe.data.bytes[7] = Proximity << 6;
   outframe.data.bytes[7] = outframe.data.bytes[7] || (Type << 4);
   Can1.sendFrame(outframe);
+
+  if (dcdcenable)
+  {
+    outframe.id = 0x3D8;
+    outframe.length = 3;            // Data payload 8 bytes
+    outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
+    outframe.rtr = 0;                 //No request
+
+    outframe.data.bytes[0] = highByte (uint16_t((parameters.dcdcsetpoint-9000)/6.8359375)<<6);
+    outframe.data.bytes[1] = lowByte (uint16_t((parameters.dcdcsetpoint-9000)/6.8359375)<<6);
+    outframe.data.bytes[1] = outframe.data.bytes[1] | 0x20;
+    outframe.data.bytes[2] = 0x00;
+    Can1.sendFrame(outframe);
+  }
 }
 
 void evseread()
@@ -897,10 +981,12 @@ void ACcurrentlimit()
       modulelimcur = parameters.currReq; // one module per phase, EVSE current limit is per phase
     }
   }
-  if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
-  {
+  /*
+    if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
+    {
     modulelimcur = (dcaclim * 1.5);
-  }
+    }
+  */
 }
 
 void DCcurrentlimit()
@@ -910,17 +996,17 @@ void DCcurrentlimit()
   for (int x = 0; x < 3; x++)
   {
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
-    if (acvolt[x] >50 && dcvolt[x] > 50)
+    if (acvolt[x] > 50 && dcvolt[x] > 50)
     {
       activemodules++;
     }
   }
   dcaclim = 0;
   int x = 2;
-  dcaclim = ((dcvolt[x] * (maxdccur+400)) / acvolt[x]) / activemodules;
+  dcaclim = ((dcvolt[x] * (maxdccur + 400)) / acvolt[x]) / activemodules;
 }
 
-void canextdecode(CAN_FRAME &frame)
+void canextdecode(CAN_FRAME & frame)
 {
   int x = 0;
   if (parameters.canControl == 1)
@@ -929,7 +1015,7 @@ void canextdecode(CAN_FRAME &frame)
     {
       if (frame.data.bytes[0] == 0x01)
       {
-        state = 1;
+        state = 2;
       }
       else
       {
