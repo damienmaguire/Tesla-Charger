@@ -29,7 +29,7 @@ template<class T> inline Print &operator <<(Print &obj, T arg) { obj.print(arg);
 
 
 //*********GENERAL VARIABLE   DATA ******************
-int debug = 1; // 1 = show canbus feedback
+int debug = 0; // 1 = show canbus feedback
 
 uint16_t voltset = 0;
 uint16_t curset = 0;
@@ -163,13 +163,16 @@ digitalWrite(5, HIGH);//enable phase 3 power module
 
 void loop() {
   // put your main code here, to run repeatedly:
-  /*
+ 
+ //You need to decode in order to read the can bus.
   if (Can0.available()) 
   {
     Can0.read(incoming); 
     candecode(incoming);
-  } 
-*/
+  }
+ 
+ 
+ 
  if (Serial.available() > 0)
   {
     incomingByte = Serial.read(); // read the incoming byte:
