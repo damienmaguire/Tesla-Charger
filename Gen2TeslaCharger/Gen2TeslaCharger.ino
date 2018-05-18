@@ -60,7 +60,7 @@ bool Vlimmode = true; // Set charges to voltage limit mode
 uint16_t modulelimcur, dcaclim = 0;
 uint16_t maxaccur = 16000; //maximum AC current in mA
 uint16_t maxdccur = 45000; //max DC current outputin mA
-int activemodules = 0;
+int activemodules,slavechargerenable = 0;
 
 
 
@@ -89,6 +89,8 @@ bool dcdcenable = 1; // turn on can messages for the DCDC.
 int ControlID = 0x300;
 int StatusID = 0x410;
 
+int candebug = 0;
+
 
 void setup()
 {
@@ -110,7 +112,7 @@ void setup()
     parameters.mainsRelay = 48;
     parameters.voltSet = 32000; //1 = 0.01V
     parameters.autoEnableCharger = 0; //disable auto start, proximity and pilot control
-    parameters.canControl = 0; //disabled can control
+    parameters.canControl = 0; //0 disabled can control, 1 master, 2 slave
     parameters.dcdcsetpoint = 14000; //voltage setpoint for dcdc in mv
     EEPROM.write(0, parameters);
   }
@@ -213,7 +215,7 @@ void loop()
         if (Serial.available() > 0)
         {
           parameters.canControl = Serial.parseInt();
-          if (parameters.canControl > 1)
+          if (parameters.canControl > 2)
           {
             parameters.canControl = 0;
           }
@@ -307,11 +309,19 @@ void loop()
     {
       Serial.print(" Autostart Off   ");
     }
+    if (parameters.canControl == 1)
+    {
+      Serial.print(" Can Mode: Master ");
+    }
+    if (parameters.canControl == 2)
+    {
+      Serial.print(" Can Mode: Slave ");
+    }
     setting = 0;
     Serial.println();
     Serial.println();
   }
-  if (parameters.canControl == 1)
+  if (parameters.canControl == 2)
   {
     if (millis() - tcan > 500)
     {
@@ -442,28 +452,28 @@ void loop()
     tlast = millis();
     if (debug != 0)
     {
-        Serial.println();
-        Serial.print(millis());
-        Serial.print(" State: ");
-        Serial.print(state);
-        if (bChargerEnabled)
-        {
-          Serial.print(" ON  ");
-        }
-        else
-        {
-          Serial.print(" OFF ");
-        }
-        if (digitalRead(DIG_IN_1) == HIGH)
-        {
-          Serial.print(" Din 1 High");
-        }
-        else
-        {
-          Serial.print(" Din 1 Low");
-        }
-        
-        
+      Serial.println();
+      Serial.print(millis());
+      Serial.print(" State: ");
+      Serial.print(state);
+      if (bChargerEnabled)
+      {
+        Serial.print(" ON  ");
+      }
+      else
+      {
+        Serial.print(" OFF ");
+      }
+      if (digitalRead(DIG_IN_1) == HIGH)
+      {
+        Serial.print(" D1 H");
+      }
+      else
+      {
+        Serial.print(" D1 L");
+      }
+
+
       if (bChargerEnabled)
       {
         Serial.println();
@@ -524,18 +534,24 @@ void loop()
           break;
 
       }
-      Serial.print(" AC limit : ");
-      Serial.print(accurlim);
+      /*
+        Serial.print(" AC limit : ");
+        Serial.print(accurlim);
+      */
       Serial.print(" Cable Limit: ");
       Serial.print(cablelim);
       Serial.print(" Module Cur Request: ");
       Serial.print(modulelimcur / 1.5, 0);
-      Serial.print(" DC AC Cur Lim: ");
-      Serial.print(dcaclim);
-      Serial.print(" Active: ");
-      Serial.print(activemodules);
+      /*
+        Serial.print(" DC AC Cur Lim: ");
+        Serial.print(dcaclim);
+        Serial.print(" Active: ");
+        Serial.print(activemodules);
+      */
       Serial.print(" DC total Cur:");
       Serial.print(totdccur * 0.005, 2);
+      Serial.print(" DC Setpoint:");
+      Serial.print(parameters.voltSet * 0.01, 0);
     }
 
   }
@@ -817,8 +833,8 @@ void Charger_msgs()
   outframe.data.bytes[7] = 0xff;
   Can0.sendFrame(outframe);
   /*////////////////////////////////////////////////////////////////////////////////////////////////////////
-  External CAN
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////*/
+    External CAN
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////*/
   uint16_t y = 0;
   outframe.id = StatusID;
   outframe.length = 8;            // Data payload 8 bytes
@@ -864,10 +880,38 @@ void Charger_msgs()
     outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
     outframe.rtr = 0;                 //No request
 
-    outframe.data.bytes[0] = highByte (uint16_t((parameters.dcdcsetpoint-9000)/6.8359375)<<6);
-    outframe.data.bytes[1] = lowByte (uint16_t((parameters.dcdcsetpoint-9000)/6.8359375)<<6);
+    outframe.data.bytes[0] = highByte (uint16_t((parameters.dcdcsetpoint - 9000) / 6.8359375) << 6);
+    outframe.data.bytes[1] = lowByte (uint16_t((parameters.dcdcsetpoint - 9000) / 6.8359375) << 6);
     outframe.data.bytes[1] = outframe.data.bytes[1] | 0x20;
     outframe.data.bytes[2] = 0x00;
+    Can1.sendFrame(outframe);
+  }
+
+  if (parameters.canControl == 1)
+  {
+    outframe.id = ControlID;
+    outframe.length = 8;            // Data payload 8 bytes
+    outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
+    outframe.rtr = 0;                 //No request
+
+    outframe.data.bytes[0] = 0;
+
+    if (state != 0)
+    {
+      if ( slavechargerenable == 1)
+      {
+        outframe.data.bytes[0] = 0x01;
+      }
+    }
+
+    outframe.data.bytes[1] = highByte(parameters.voltSet);
+    outframe.data.bytes[2] = lowByte(parameters.voltSet);
+    outframe.data.bytes[3] = highByte(maxdccur);
+    outframe.data.bytes[4] = lowByte(maxdccur);
+    outframe.data.bytes[5] = highByte(modulelimcur);
+    outframe.data.bytes[6] = lowByte(modulelimcur);
+    outframe.data.bytes[7] = 0;
+
     Can1.sendFrame(outframe);
   }
 }
@@ -958,10 +1002,6 @@ void ACcurrentlimit()
     {
       modulelimcur = accurlim * 1.5; // one module per phase, EVSE current limit is per phase
     }
-    if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
-    {
-      modulelimcur = parameters.currReq;
-    }
     if (Type == 2)
     {
       if (modulelimcur > (cablelim * 1.5))
@@ -976,10 +1016,23 @@ void ACcurrentlimit()
     {
       modulelimcur = (parameters.currReq / 3); // all module parallel, sharing AC input current
     }
+  }
+  if (parameters.canControl == 1)
+  {
+    if (modulelimcur > (15000 * 1.5)) //enable second charger if current available >15A
+    {
+      modulelimcur = modulelimcur * 0.5;
+      slavechargerenable = 1;
+
+    }
     else
     {
-      modulelimcur = parameters.currReq; // one module per phase, EVSE current limit is per phase
+      slavechargerenable = 0;
     }
+  }
+  if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
+  {
+    modulelimcur = parameters.currReq;
   }
   /*
     if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
@@ -1009,13 +1062,16 @@ void DCcurrentlimit()
 void canextdecode(CAN_FRAME & frame)
 {
   int x = 0;
-  if (parameters.canControl == 1)
+  if (parameters.canControl == 2)
   {
     if (ControlID == frame.id) //Charge Control message
     {
-      if (frame.data.bytes[0] == 0x01)
+      if (frame.data.bytes[0] & 0x01 == 1)
       {
-        state = 2;
+        if (state == 0)
+        {
+          state = 2;
+        }
       }
       else
       {
@@ -1023,6 +1079,18 @@ void canextdecode(CAN_FRAME & frame)
       }
       parameters.voltSet = (frame.data.bytes[1] << 8) + frame.data.bytes[2];
       maxdccur = (frame.data.bytes[3] << 8) + frame.data.bytes[4];
+      modulelimcur  = (frame.data.bytes[5] << 8) + frame.data.bytes[6];
+      if (candebug == 1)
+      {
+        Serial.println();
+        Serial.print( state);
+        Serial.print(" ");
+        Serial.print(parameters.voltSet);
+        Serial.print(" ");
+        Serial.print(modulelimcur);
+        Serial.println();
+      }
+
       tcan = millis();
     }
   }
