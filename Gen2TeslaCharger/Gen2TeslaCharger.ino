@@ -837,6 +837,10 @@ void Charger_msgs()
     ////////////////////////////////////////////////////////////////////////////////////////////////////////*/
   uint16_t y = 0;
   outframe.id = StatusID;
+  if (parameters.canControl == 2)
+    {
+      outframe.id = StatusID+1;
+    }
   outframe.length = 8;            // Data payload 8 bytes
   outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
   outframe.rtr = 0;                 //No request
