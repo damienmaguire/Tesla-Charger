@@ -60,7 +60,7 @@ bool Vlimmode = true; // Set charges to voltage limit mode
 uint16_t modulelimcur, dcaclim = 0;
 uint16_t maxaccur = 16000; //maximum AC current in mA
 uint16_t maxdccur = 45000; //max DC current outputin mA
-int activemodules,slavechargerenable = 0;
+int activemodules, slavechargerenable = 0;
 
 
 
@@ -88,6 +88,8 @@ bool dcdcenable = 1; // turn on can messages for the DCDC.
 //*********Charger Messages VARIABLE   DATA ******************
 int ControlID = 0x300;
 int StatusID = 0x410;
+unsigned long ElconID = 0x18FF50E5;
+unsigned long ElconControlID = 0x1806E5F4;
 
 int candebug = 0;
 
@@ -215,7 +217,7 @@ void loop()
         if (Serial.available() > 0)
         {
           parameters.canControl = Serial.parseInt();
-          if (parameters.canControl > 2)
+          if (parameters.canControl > 3)
           {
             parameters.canControl = 0;
           }
@@ -315,17 +317,23 @@ void loop()
     }
     if (parameters.canControl == 2)
     {
+      Serial.print(" Can Mode: Master Elcon ");
+    }
+    if (parameters.canControl == 3)
+    {
       Serial.print(" Can Mode: Slave ");
     }
     setting = 0;
     Serial.println();
     Serial.println();
   }
-  if (parameters.canControl == 2)
+  if (parameters.canControl > 1)
   {
     if (millis() - tcan > 500)
     {
       state = 0;
+      Serial.println();
+      Serial.println("CAN time-out");
     }
   }
 
@@ -559,42 +567,44 @@ void loop()
   ACcurrentlimit();
 
   //EVSE automatic control
-  if (parameters.autoEnableCharger == 1)
+
+  evseread();
+  if (Proximity == Connected) //check if plugged in
   {
-    if (digitalRead(DIG_IN_1) == HIGH)
+    //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
+    if (modulelimcur > 1400) // one amp or more active modules
     {
-      evseread();
-      if (Proximity == Connected) //check if plugged in
+      if (parameters.autoEnableCharger == 1)
       {
-        //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
-
-
-        if (modulelimcur > 1400) // one amp or more active modules
+        if (state == 0)
         {
-          if (state == 0)
+          if (digitalRead(DIG_IN_1) == HIGH)
           {
             state = 2;// initialize modules
+
             tboot = millis();
           }
         }
-        else // unplugged or buton pressed stop charging
-        {
-          //state = 0;
-        }
       }
-      else // unplugged or buton pressed stop charging
-      {
-        state = 0;
-        digitalWrite(EVSE_ACTIVATE, LOW);
-      }
+      digitalWrite(DIG_OUT_2, HIGH); //enable AC present indication
     }
-    else
+    /*
+    else // unplugged or buton pressed stop charging
     {
       state = 0;
+      digitalWrite(DIG_OUT_2, LOW); //disable AC present indication
       digitalWrite(EVSE_ACTIVATE, LOW);
     }
+    */
+  }
+  else // unplugged or buton pressed stop charging
+  {
+    state = 0;
+    digitalWrite(EVSE_ACTIVATE, LOW);
+    digitalWrite(DIG_OUT_2, LOW); //disable AC present indication
   }
 }
+
 
 
 void candecode(CAN_FRAME & frame)
@@ -835,12 +845,12 @@ void Charger_msgs()
   /*////////////////////////////////////////////////////////////////////////////////////////////////////////
     External CAN
     ////////////////////////////////////////////////////////////////////////////////////////////////////////*/
-  uint16_t y = 0;
+  uint16_t y, z = 0;
   outframe.id = StatusID;
-  if (parameters.canControl == 2)
-    {
-      outframe.id = StatusID+1;
-    }
+  if (parameters.canControl == 3)
+  {
+    outframe.id = StatusID + 1;
+  }
   outframe.length = 8;            // Data payload 8 bytes
   outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
   outframe.rtr = 0;                 //No request
@@ -851,22 +861,20 @@ void Charger_msgs()
   }
   outframe.data.bytes[0] = y / 3;
 
-  y = 0;
-
   if (Config == Singlephase)
   {
     for (int x = 0; x < 3; x++)
     {
-      y = y + (accur[x] * 66.66) ;
+      z = z + (accur[x] * 66.66) ;
     }
   }
   else
   {
-    y = accur[2] * 66.66;
+    z = accur[2] * 66.66;
   }
 
-  outframe.data.bytes[1] = lowByte (y);
-  outframe.data.bytes[2] = highByte (y);
+  outframe.data.bytes[1] = lowByte (z);
+  outframe.data.bytes[2] = highByte (z);
 
   outframe.data.bytes[3] = lowByte (uint16_t (totdccur)); //0.005Amp
   outframe.data.bytes[4] = highByte (uint16_t (totdccur));  //0.005Amp
@@ -877,6 +885,26 @@ void Charger_msgs()
   outframe.data.bytes[7] = outframe.data.bytes[7] || (Type << 4);
   Can1.sendFrame(outframe);
 
+  /////////Elcon Message////////////
+
+  outframe.id = ElconID;
+  outframe.length = 8;            // Data payload 8 bytes
+  outframe.extended = 1;          // Extended addresses - 0=11-bit 1=29bit
+  outframe.rtr = 0;                 //No request
+
+
+  outframe.data.bytes[0] = highByte (y * 10 / 3);
+  outframe.data.bytes[1] = lowByte (y * 10 / 3);
+  outframe.data.bytes[2] = highByte (uint16_t (totdccur * 20)); //0.005Amp conv to 0.1
+  outframe.data.bytes[3] = lowByte (uint16_t (totdccur * 20)); //0.005Amp conv to 0.1
+  outframe.data.bytes[4] = 0x00;
+  outframe.data.bytes[5] = 0x00;
+  outframe.data.bytes[6] = 0x00;
+  outframe.data.bytes[7] = 0x00;
+  Can1.sendFrame(outframe);
+
+
+  /////////////////////////////////////////////////////////////////////////
   if (dcdcenable)
   {
     outframe.id = 0x3D8;
@@ -890,6 +918,8 @@ void Charger_msgs()
     outframe.data.bytes[2] = 0x00;
     Can1.sendFrame(outframe);
   }
+
+
 
   if (parameters.canControl == 1)
   {
@@ -1068,6 +1098,39 @@ void canextdecode(CAN_FRAME & frame)
   int x = 0;
   if (parameters.canControl == 2)
   {
+    if (ElconControlID == frame.id) //Charge Control message
+    {
+      parameters.voltSet = ((frame.data.bytes[0] << 8) + frame.data.bytes[1]) * 0.1;
+      maxdccur = (frame.data.bytes[2] << 8) + frame.data.bytes[3];
+
+      if (frame.data.bytes[4] & 0x01 == 1)
+      {
+        if (state == 0)
+        {
+          state = 2;
+          tboot = millis();
+        }
+      }
+      else
+      {
+        state = 0;
+      }
+      if (candebug == 1)
+      {
+        Serial.println();
+        Serial.print( state);
+        Serial.print(" ");
+        Serial.print(parameters.voltSet);
+        Serial.print(" ");
+        Serial.print(modulelimcur);
+        Serial.println();
+      }
+      tcan = millis();
+    }
+  }
+
+  if (parameters.canControl == 3)
+  {
     if (ControlID == frame.id) //Charge Control message
     {
       if (frame.data.bytes[0] & 0x01 == 1)
@@ -1075,6 +1138,7 @@ void canextdecode(CAN_FRAME & frame)
         if (state == 0)
         {
           state = 2;
+          tboot = millis();
         }
       }
       else
