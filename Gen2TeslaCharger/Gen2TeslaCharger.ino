@@ -904,7 +904,7 @@ void Charger_msgs()
   Can1.sendFrame(outframe);
 
 
-  /////////////////////////////////////////////////////////////////////////
+  ///DCDC CAN//////////////////////////////////////////////////////////////////////
   if (dcdcenable)
   {
     outframe.id = 0x3D8;
@@ -912,14 +912,15 @@ void Charger_msgs()
     outframe.extended = 0;          // Extended addresses - 0=11-bit 1=29bit
     outframe.rtr = 0;                 //No request
 
-    outframe.data.bytes[0] = highByte (uint16_t((parameters.dcdcsetpoint - 9000) / 6.8359375) << 6);
-    outframe.data.bytes[1] = lowByte (uint16_t((parameters.dcdcsetpoint - 9000) / 6.8359375) << 6);
+    outframe.data.bytes[0] = highByte (uint16_t((parameters.dcdcsetpoint - 9000) / 68.359375) << 6);
+    outframe.data.bytes[1] = lowByte (uint16_t((parameters.dcdcsetpoint - 9000) / 68.359375) << 6);
+    
     outframe.data.bytes[1] = outframe.data.bytes[1] | 0x20;
     outframe.data.bytes[2] = 0x00;
     Can1.sendFrame(outframe);
   }
 
-
+////////////////////////////////////////////////////////////////////
 
   if (parameters.canControl == 1)
   {
