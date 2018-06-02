@@ -49,7 +49,6 @@ volatile int dutycycle = 0;
 uint16_t cablelim = 0; // Type 2 cable current limit
 
 //*********Single or Three Phase Config VARIABLE   DATA ******************
-byte Config = 1;
 
 //proximity status values
 #define Singlephase 0 // all parrallel on one phase Type 1
@@ -91,7 +90,7 @@ int StatusID = 0x410;
 unsigned long ElconID = 0x18FF50E5;
 unsigned long ElconControlID = 0x1806E5F4;
 
-int candebug = 0;
+int candebug = 1;
 
 
 void setup()
@@ -116,6 +115,7 @@ void setup()
     parameters.autoEnableCharger = 0; //disable auto start, proximity and pilot control
     parameters.canControl = 0; //0 disabled can control, 1 master, 2 slave
     parameters.dcdcsetpoint = 14000; //voltage setpoint for dcdc in mv
+    parameters.phaseconfig = Threephase; //AC input configuration
     EEPROM.write(0, parameters);
   }
 
@@ -208,6 +208,26 @@ void loop()
           if (parameters.autoEnableCharger > 1)
           {
             parameters.autoEnableCharger = 0;
+          }
+          setting = 1;
+        }
+        break;
+
+      case 'p'://a for can control enable
+        if (Serial.available() > 0)
+        {
+          parameters.phaseconfig = Serial.parseInt();
+          if ( parameters.phaseconfig == 3)
+          {
+            parameters.phaseconfig = Threephase;
+          }
+          if (parameters.phaseconfig == 1)
+          {
+            parameters.phaseconfig = Singlephase;
+          }
+          if (parameters.phaseconfig > 1)
+          {
+            parameters.phaseconfig = Singlephase;
           }
           setting = 1;
         }
@@ -323,18 +343,27 @@ void loop()
     {
       Serial.print(" Can Mode: Slave ");
     }
+    if (parameters.phaseconfig == Singlephase)
+    {
+      Serial.print(" Single Phase ");
+    }
+    if (parameters.phaseconfig == Threephase)
+    {
+      Serial.print(" Three Phase ");
+    }
     setting = 0;
     Serial.println();
     Serial.println();
   }
   if (parameters.canControl > 1)
   {
-    if (millis() - tcan > 500)
-    {
+    /*if (millis() - tcan > 500)
+      {
       state = 0;
       Serial.println();
       Serial.println("CAN time-out");
-    }
+      }
+    */
   }
 
   switch (state)
@@ -589,12 +618,12 @@ void loop()
       digitalWrite(DIG_OUT_2, HIGH); //enable AC present indication
     }
     /*
-    else // unplugged or buton pressed stop charging
-    {
+      else // unplugged or buton pressed stop charging
+      {
       state = 0;
       digitalWrite(DIG_OUT_2, LOW); //disable AC present indication
       digitalWrite(EVSE_ACTIVATE, LOW);
-    }
+      }
     */
   }
   else // unplugged or buton pressed stop charging
@@ -861,7 +890,7 @@ void Charger_msgs()
   }
   outframe.data.bytes[0] = y / 3;
 
-  if (Config == Singlephase)
+  if (parameters.phaseconfig == Singlephase)
   {
     for (int x = 0; x < 3; x++)
     {
@@ -914,13 +943,13 @@ void Charger_msgs()
 
     outframe.data.bytes[0] = highByte (uint16_t((parameters.dcdcsetpoint - 9000) / 68.359375) << 6);
     outframe.data.bytes[1] = lowByte (uint16_t((parameters.dcdcsetpoint - 9000) / 68.359375) << 6);
-    
+
     outframe.data.bytes[1] = outframe.data.bytes[1] | 0x20;
     outframe.data.bytes[2] = 0x00;
     Can1.sendFrame(outframe);
   }
 
-////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
 
   if (parameters.canControl == 1)
   {
@@ -1029,7 +1058,7 @@ void ACcurrentlimit()
     {
       accurlim = 0;
     }
-    if (Config == Singlephase)
+    if (parameters.phaseconfig == Singlephase)
     {
       modulelimcur = (accurlim / 3) * 1.5 ; // all module parallel, sharing AC input current
     }
@@ -1047,7 +1076,7 @@ void ACcurrentlimit()
   }
   else
   {
-    if (Config == Singlephase)
+    if (parameters.phaseconfig == Singlephase)
     {
       modulelimcur = (parameters.currReq / 3); // all module parallel, sharing AC input current
     }
@@ -1065,9 +1094,19 @@ void ACcurrentlimit()
       slavechargerenable = 0;
     }
   }
-  if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
+  if (parameters.phaseconfig == Threephase)
   {
-    modulelimcur = parameters.currReq;
+    if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
+    {
+      modulelimcur = parameters.currReq;
+    }
+  }
+  else
+  {
+    if (modulelimcur > (parameters.currReq/activemodules)) //if evse allows more current then set in parameters limit it
+    {
+      modulelimcur = (parameters.currReq/activemodules);
+    }
   }
   /*
     if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
