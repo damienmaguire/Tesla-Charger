@@ -34,7 +34,6 @@ bool bChargerEnabled;
 
 //*********EVSE VARIABLE   DATA ******************
 byte Proximity = 0;
-int Type = 2;
 uint16_t ACvoltIN = 240; // AC input voltage 240VAC for EU/UK and 110VAC for US
 //proximity status values for type 1
 #define Unconnected 0 // 3.3V
@@ -116,6 +115,7 @@ void setup()
     parameters.canControl = 0; //0 disabled can control, 1 master, 2 slave
     parameters.dcdcsetpoint = 14000; //voltage setpoint for dcdc in mv
     parameters.phaseconfig = Threephase; //AC input configuration
+    parameters.type = 2; //Socket type1 or 2
     EEPROM.write(0, parameters);
   }
 
@@ -228,6 +228,22 @@ void loop()
           if (parameters.phaseconfig > 1)
           {
             parameters.phaseconfig = Singlephase;
+          }
+          setting = 1;
+        }
+        break;
+
+      case 't'://t for type
+        if (Serial.available() > 0)
+        {
+          parameters.type = Serial.parseInt();
+          if (parameters.type > 2)
+          {
+            parameters.type = 2;
+          }
+          if (parameters.type == 0)
+          {
+            parameters.type = 2;
           }
           setting = 1;
         }
@@ -350,6 +366,14 @@ void loop()
     if (parameters.phaseconfig == Threephase)
     {
       Serial.print(" Three Phase ");
+    }
+    if (parameters.type == 1)
+    {
+      Serial.print(" Type 1 ");
+    }
+    if (parameters.type == 2)
+    {
+      Serial.print(" Type 2 ");
     }
     setting = 0;
     Serial.println();
@@ -911,7 +935,7 @@ void Charger_msgs()
   outframe.data.bytes[6] = highByte (uint16_t (modulelimcur * 0.66666));
   outframe.data.bytes[7] = 0x00;
   outframe.data.bytes[7] = Proximity << 6;
-  outframe.data.bytes[7] = outframe.data.bytes[7] || (Type << 4);
+  outframe.data.bytes[7] = outframe.data.bytes[7] || (parameters.type << 4);
   Can1.sendFrame(outframe);
 
   /////////Elcon Message////////////
@@ -984,7 +1008,7 @@ void evseread()
 {
   uint16_t val = 0;
   val = analogRead(EVSE_PROX);     // read the input pin
-  if ( Type == 2)
+  if ( parameters.type == 2)
   {
     if ( val > 950)
     {
@@ -1012,7 +1036,7 @@ void evseread()
     }
   }
 
-  if ( Type == 1)
+  if ( parameters.type == 1)
   {
     if ( val > 800)
     {
@@ -1066,7 +1090,7 @@ void ACcurrentlimit()
     {
       modulelimcur = accurlim * 1.5; // one module per phase, EVSE current limit is per phase
     }
-    if (Type == 2)
+    if (parameters.type == 2)
     {
       if (modulelimcur > (cablelim * 1.5))
       {
@@ -1103,9 +1127,9 @@ void ACcurrentlimit()
   }
   else
   {
-    if (modulelimcur > (parameters.currReq/activemodules)) //if evse allows more current then set in parameters limit it
+    if (modulelimcur > (parameters.currReq / activemodules)) //if evse allows more current then set in parameters limit it
     {
-      modulelimcur = (parameters.currReq/activemodules);
+      modulelimcur = (parameters.currReq / activemodules);
     }
   }
   /*

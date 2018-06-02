@@ -26,6 +26,7 @@ typedef struct
     uint8_t  mainsRelay; //which output is used to control the AC relay
     uint8_t  autoEnableCharger;
     uint8_t  canControl;
+    uint8_t  type;
     uint8_t  phaseconfig;
     uint16_t voltSet;
     uint16_t currReq;
