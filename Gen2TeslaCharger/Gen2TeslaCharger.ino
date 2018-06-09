@@ -112,7 +112,7 @@ void setup()
     parameters.mainsRelay = 48;
     parameters.voltSet = 32000; //1 = 0.01V
     parameters.autoEnableCharger = 0; //disable auto start, proximity and pilot control
-    parameters.canControl = 0; //0 disabled can control, 1 master, 2 slave
+    parameters.canControl = 0; //0 disabled can control, 1 master, 3 slave
     parameters.dcdcsetpoint = 14000; //voltage setpoint for dcdc in mv
     parameters.phaseconfig = Threephase; //AC input configuration
     parameters.type = 2; //Socket type1 or 2
@@ -396,15 +396,15 @@ void loop()
       if (bChargerEnabled == true)
       {
         bChargerEnabled = false;
-        digitalWrite(DIG_OUT_1, LOW);//MAINS OFF
-        digitalWrite(EVSE_ACTIVATE, LOW);
-        digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
-        digitalWrite(CHARGER2_ACTIVATE, LOW); //chargeph2 deactivate
-        digitalWrite(CHARGER3_ACTIVATE, LOW); //chargeph3 deactivate
-        digitalWrite(CHARGER1_ENABLE, LOW);//disable phase 1 power module
-        digitalWrite(CHARGER2_ENABLE, LOW);//disable phase 2 power module
-        digitalWrite(CHARGER3_ENABLE, LOW);//disable phase 3 power module
       }
+      digitalWrite(DIG_OUT_1, LOW);//MAINS OFF
+      digitalWrite(EVSE_ACTIVATE, LOW);
+      digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
+      digitalWrite(CHARGER2_ACTIVATE, LOW); //chargeph2 deactivate
+      digitalWrite(CHARGER3_ACTIVATE, LOW); //chargeph3 deactivate
+      digitalWrite(CHARGER1_ENABLE, LOW);//disable phase 1 power module
+      digitalWrite(CHARGER2_ENABLE, LOW);//disable phase 2 power module
+      digitalWrite(CHARGER3_ENABLE, LOW);//disable phase 3 power module
       break;
 
     case 1://Charger on
