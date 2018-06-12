@@ -216,16 +216,12 @@ void loop()
       case 'p'://a for can control enable
         if (Serial.available() > 0)
         {
-          parameters.phaseconfig = Serial.parseInt();
-          if ( parameters.phaseconfig == 3)
+          parameters.phaseconfig = Serial.parseInt()-1;
+          if ( parameters.phaseconfig == 2)
           {
             parameters.phaseconfig = Threephase;
           }
-          if (parameters.phaseconfig == 1)
-          {
-            parameters.phaseconfig = Singlephase;
-          }
-          if (parameters.phaseconfig > 1)
+          if (parameters.phaseconfig == 0)
           {
             parameters.phaseconfig = Singlephase;
           }
