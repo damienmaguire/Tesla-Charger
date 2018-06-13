@@ -216,7 +216,7 @@ void loop()
       case 'p'://a for can control enable
         if (Serial.available() > 0)
         {
-          parameters.phaseconfig = Serial.parseInt()-1;
+          parameters.phaseconfig = Serial.parseInt() - 1;
           if ( parameters.phaseconfig == 2)
           {
             parameters.phaseconfig = Threephase;
@@ -630,27 +630,18 @@ void loop()
           if (digitalRead(DIG_IN_1) == HIGH)
           {
             state = 2;// initialize modules
-
             tboot = millis();
           }
         }
       }
-      digitalWrite(DIG_OUT_2, HIGH); //enable AC present indication
     }
-    /*
-      else // unplugged or buton pressed stop charging
-      {
-      state = 0;
-      digitalWrite(DIG_OUT_2, LOW); //disable AC present indication
-      digitalWrite(EVSE_ACTIVATE, LOW);
-      }
-    */
+    digitalWrite(DIG_OUT_2, HIGH); //enable AC present indication
   }
   else // unplugged or buton pressed stop charging
   {
     state = 0;
-    digitalWrite(EVSE_ACTIVATE, LOW);
     digitalWrite(DIG_OUT_2, LOW); //disable AC present indication
+    digitalWrite(EVSE_ACTIVATE, LOW);
   }
 }
 
