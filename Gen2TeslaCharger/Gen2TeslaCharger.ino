@@ -1086,10 +1086,6 @@ void ACcurrentlimit()
     else
     {
       modulelimcur = accurlim * 1.5; // one module per phase, EVSE current limit is per phase
-
-    }
-    if (parameters.type == 2)
-    {
       if (modulelimcur > (cablelim * 1.5))
       {
         modulelimcur = cablelim * 1.5;
@@ -1103,7 +1099,7 @@ void ACcurrentlimit()
       modulelimcur = (parameters.currReq / 3); // all module parallel, sharing AC input current
     }
   }
-  if (parameters.canControl == 1 |parameters.canControl == 2)
+  if (parameters.canControl == 1 | parameters.canControl == 2)
   {
     if (accurlim * 1.5 > (16000 * 1.5)) //enable second charger if current available >15A
     {
@@ -1140,8 +1136,8 @@ void ACcurrentlimit()
 
 void DCcurrentlimit()
 {
+  /*
   totdccur = 1; // 0.005Amp
-  activemodules = 0;
   for (int x = 0; x < 3; x++)
   {
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
@@ -1153,6 +1149,7 @@ void DCcurrentlimit()
   dcaclim = 0;
   int x = 2;
   dcaclim = ((dcvolt[x] * (maxdccur + 400)) / acvolt[x]) / activemodules;
+  */
 }
 
 void canextdecode(CAN_FRAME & frame)
@@ -1204,14 +1201,14 @@ void canextdecode(CAN_FRAME & frame)
         }
       }
       else
-      { 
-        if(millis()-slavetimeout > 1000)
+      {
+        if (millis() - slavetimeout > 1000)
         {
-        slavetimeout = millis();
+          slavetimeout = millis();
         }
-        if(millis()-slavetimeout > 500)
+        if (millis() - slavetimeout > 500)
         {
-        state = 0;
+          state = 0;
         }
       }
       parameters.voltSet = (frame.data.bytes[1] << 8) + frame.data.bytes[2];
