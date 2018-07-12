@@ -29,7 +29,7 @@ uint16_t curset = 0;
 int  setting = 1;
 int incomingByte = 0;
 int state;
-unsigned long tlast, tcan, tboot = 0;
+unsigned long slavetimeout, tlast, tcan, tboot = 0;
 bool bChargerEnabled;
 
 //*********EVSE VARIABLE   DATA ******************
@@ -112,7 +112,7 @@ void setup()
     parameters.mainsRelay = 48;
     parameters.voltSet = 32000; //1 = 0.01V
     parameters.autoEnableCharger = 0; //disable auto start, proximity and pilot control
-    parameters.canControl = 0; //0 disabled can control, 1 master, 2 slave
+    parameters.canControl = 0; //0 disabled can control, 1 master, 3 slave
     parameters.dcdcsetpoint = 14000; //voltage setpoint for dcdc in mv
     parameters.phaseconfig = Threephase; //AC input configuration
     parameters.type = 2; //Socket type1 or 2
@@ -192,6 +192,7 @@ void loop()
   if (Can1.available())
   {
     Can1.read(incoming);
+
     canextdecode(incoming);
   }
 
@@ -216,18 +217,14 @@ void loop()
       case 'p'://a for can control enable
         if (Serial.available() > 0)
         {
-          parameters.phaseconfig = Serial.parseInt();
-          if ( parameters.phaseconfig == 3)
+          parameters.phaseconfig = Serial.parseInt() - 1;
+          if ( parameters.phaseconfig == 2)
           {
-            parameters.phaseconfig = Threephase;
+            parameters.phaseconfig = 1;
           }
-          if (parameters.phaseconfig == 1)
+          if (parameters.phaseconfig == 0)
           {
-            parameters.phaseconfig = Singlephase;
-          }
-          if (parameters.phaseconfig > 1)
-          {
-            parameters.phaseconfig = Singlephase;
+            parameters.phaseconfig = 0;
           }
           setting = 1;
         }
@@ -330,8 +327,10 @@ void loop()
     {
       Serial.print("Charger Off   ");
     }
-    Serial.print("Enabled Phases : ");
+    Serial.print("Enabled Modules : ");
     Serial.print(parameters.enabledChargers);
+    Serial.print(" Phases : ");
+    Serial.print(parameters.phaseconfig);
     Serial.print("Set voltage : ");
     Serial.print(parameters.voltSet * 0.01f, 0);
     Serial.print("V | Set current lim AC : ");
@@ -381,13 +380,15 @@ void loop()
   }
   if (parameters.canControl > 1)
   {
-    /*if (millis() - tcan > 500)
+    if (state != 0)
+    {
+      if (millis() - tcan > 500)
       {
-      state = 0;
-      Serial.println();
-      Serial.println("CAN time-out");
+        state = 0;
+        Serial.println();
+        Serial.println("CAN time-out");
       }
-    */
+    }
   }
 
   switch (state)
@@ -396,15 +397,15 @@ void loop()
       if (bChargerEnabled == true)
       {
         bChargerEnabled = false;
-        digitalWrite(DIG_OUT_1, LOW);//MAINS OFF
-        digitalWrite(EVSE_ACTIVATE, LOW);
-        digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
-        digitalWrite(CHARGER2_ACTIVATE, LOW); //chargeph2 deactivate
-        digitalWrite(CHARGER3_ACTIVATE, LOW); //chargeph3 deactivate
-        digitalWrite(CHARGER1_ENABLE, LOW);//disable phase 1 power module
-        digitalWrite(CHARGER2_ENABLE, LOW);//disable phase 2 power module
-        digitalWrite(CHARGER3_ENABLE, LOW);//disable phase 3 power module
       }
+      digitalWrite(DIG_OUT_1, LOW);//MAINS OFF
+      digitalWrite(EVSE_ACTIVATE, LOW);
+      digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
+      digitalWrite(CHARGER2_ACTIVATE, LOW); //chargeph2 deactivate
+      digitalWrite(CHARGER3_ACTIVATE, LOW); //chargeph3 deactivate
+      digitalWrite(CHARGER1_ENABLE, LOW);//disable phase 1 power module
+      digitalWrite(CHARGER2_ENABLE, LOW);//disable phase 2 power module
+      digitalWrite(CHARGER3_ENABLE, LOW);//disable phase 3 power module
       break;
 
     case 1://Charger on
@@ -517,6 +518,8 @@ void loop()
       Serial.print(millis());
       Serial.print(" State: ");
       Serial.print(state);
+      Serial.print(" Phases : ");
+      Serial.print(parameters.phaseconfig);
       if (bChargerEnabled)
       {
         Serial.print(" ON  ");
@@ -622,39 +625,33 @@ void loop()
   //EVSE automatic control
 
   evseread();
-  if (Proximity == Connected) //check if plugged in
+  if (parameters.autoEnableCharger == 1)
   {
-    //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
-    if (modulelimcur > 1400) // one amp or more active modules
+    if (Proximity == Connected) //check if plugged in
     {
-      if (parameters.autoEnableCharger == 1)
+      //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
+      if (modulelimcur > 1400) // one amp or more active modules
       {
-        if (state == 0)
+        if (parameters.autoEnableCharger == 1)
         {
-          if (digitalRead(DIG_IN_1) == HIGH)
+          if (state == 0)
           {
-            state = 2;// initialize modules
-
-            tboot = millis();
+            if (digitalRead(DIG_IN_1) == HIGH)
+            {
+              state = 2;// initialize modules
+              tboot = millis();
+            }
           }
         }
       }
       digitalWrite(DIG_OUT_2, HIGH); //enable AC present indication
     }
-    /*
-      else // unplugged or buton pressed stop charging
-      {
+    else // unplugged or buton pressed stop charging
+    {
       state = 0;
       digitalWrite(DIG_OUT_2, LOW); //disable AC present indication
       digitalWrite(EVSE_ACTIVATE, LOW);
-      }
-    */
-  }
-  else // unplugged or buton pressed stop charging
-  {
-    state = 0;
-    digitalWrite(EVSE_ACTIVATE, LOW);
-    digitalWrite(DIG_OUT_2, LOW); //disable AC present indication
+    }
   }
 }
 
@@ -1082,16 +1079,13 @@ void ACcurrentlimit()
     {
       accurlim = 0;
     }
-    if (parameters.phaseconfig == Singlephase)
+    if (parameters.phaseconfig == 0)
     {
       modulelimcur = (accurlim / 3) * 1.5 ; // all module parallel, sharing AC input current
     }
     else
     {
       modulelimcur = accurlim * 1.5; // one module per phase, EVSE current limit is per phase
-    }
-    if (parameters.type == 2)
-    {
       if (modulelimcur > (cablelim * 1.5))
       {
         modulelimcur = cablelim * 1.5;
@@ -1100,14 +1094,14 @@ void ACcurrentlimit()
   }
   else
   {
-    if (parameters.phaseconfig == Singlephase)
+    if (parameters.phaseconfig == 0)
     {
       modulelimcur = (parameters.currReq / 3); // all module parallel, sharing AC input current
     }
   }
-  if (parameters.canControl == 1)
+  if (parameters.canControl == 1 | parameters.canControl == 2)
   {
-    if (modulelimcur > (15000 * 1.5)) //enable second charger if current available >15A
+    if (accurlim * 1.5 > (16000 * 1.5)) //enable second charger if current available >15A
     {
       modulelimcur = modulelimcur * 0.5;
       slavechargerenable = 1;
@@ -1118,7 +1112,7 @@ void ACcurrentlimit()
       slavechargerenable = 0;
     }
   }
-  if (parameters.phaseconfig == Threephase)
+  if (parameters.phaseconfig == 1)
   {
     if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
     {
@@ -1129,7 +1123,7 @@ void ACcurrentlimit()
   {
     if (modulelimcur > (parameters.currReq / activemodules)) //if evse allows more current then set in parameters limit it
     {
-      modulelimcur = (parameters.currReq / activemodules);
+      modulelimcur = (parameters.currReq / 3);
     }
   }
   /*
@@ -1142,8 +1136,8 @@ void ACcurrentlimit()
 
 void DCcurrentlimit()
 {
+  /*
   totdccur = 1; // 0.005Amp
-  activemodules = 0;
   for (int x = 0; x < 3; x++)
   {
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
@@ -1155,6 +1149,7 @@ void DCcurrentlimit()
   dcaclim = 0;
   int x = 2;
   dcaclim = ((dcvolt[x] * (maxdccur + 400)) / acvolt[x]) / activemodules;
+  */
 }
 
 void canextdecode(CAN_FRAME & frame)
@@ -1207,7 +1202,14 @@ void canextdecode(CAN_FRAME & frame)
       }
       else
       {
-        state = 0;
+        if (millis() - slavetimeout > 1000)
+        {
+          slavetimeout = millis();
+        }
+        if (millis() - slavetimeout > 500)
+        {
+          state = 0;
+        }
       }
       parameters.voltSet = (frame.data.bytes[1] << 8) + frame.data.bytes[2];
       maxdccur = (frame.data.bytes[3] << 8) + frame.data.bytes[4];
