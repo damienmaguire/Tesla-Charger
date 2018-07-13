@@ -279,14 +279,20 @@ void loop()
         {
           setting = 1;
           digitalWrite(LED_BUILTIN, HIGH);
-          if (state == 0)
+          if (Serial.parseInt() == 1)
           {
-            state = 2;// initialize modules
-            tboot = millis();
+            if (state == 0)
+            {
+              state = 2;// initialize modules
+              tboot = millis();
+            }
           }
-          if (state == 1)
+          if (Serial.parseInt() == 0)
           {
-            state = 0;// initialize modules
+            if (state == 1)
+            {
+              state = 0;// initialize modules
+            }
           }
         }
         break;
@@ -520,6 +526,8 @@ void loop()
       Serial.print(state);
       Serial.print(" Phases : ");
       Serial.print(parameters.phaseconfig);
+      Serial.print(" Modules Avtive : ");
+      Serial.print(activemodules);
       if (bChargerEnabled)
       {
         Serial.print(" ON  ");
@@ -619,7 +627,7 @@ void loop()
     }
 
   }
-  DCcurrentlimit();
+  //DCcurrentlimit();
   ACcurrentlimit();
 
   //EVSE automatic control
@@ -1123,7 +1131,7 @@ void ACcurrentlimit()
   {
     if (modulelimcur > (parameters.currReq / activemodules)) //if evse allows more current then set in parameters limit it
     {
-      modulelimcur = (parameters.currReq / 3);
+      modulelimcur = (parameters.currReq / activemodules);
     }
   }
   /*
@@ -1137,18 +1145,18 @@ void ACcurrentlimit()
 void DCcurrentlimit()
 {
   /*
-  totdccur = 1; // 0.005Amp
-  for (int x = 0; x < 3; x++)
-  {
+    totdccur = 1; // 0.005Amp
+    for (int x = 0; x < 3; x++)
+    {
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
     if (acvolt[x] > 50 && dcvolt[x] > 50)
     {
       activemodules++;
     }
-  }
-  dcaclim = 0;
-  int x = 2;
-  dcaclim = ((dcvolt[x] * (maxdccur + 400)) / acvolt[x]) / activemodules;
+    }
+    dcaclim = 0;
+    int x = 2;
+    dcaclim = ((dcvolt[x] * (maxdccur + 400)) / acvolt[x]) / activemodules;
   */
 }
 
