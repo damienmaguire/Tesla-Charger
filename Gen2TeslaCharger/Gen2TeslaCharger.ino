@@ -610,24 +610,20 @@ void loop()
         Serial.print(" AC limit : ");
         Serial.print(accurlim);
       */
-      Serial.print(" Cable Limit: ");
+      Serial.print(" /Cable Limit: ");
       Serial.print(cablelim);
-      Serial.print(" Module Cur Request: ");
+      Serial.print(" /Module Cur Request: ");
       Serial.print(modulelimcur / 1.5, 0);
-      /*
-        Serial.print(" DC AC Cur Lim: ");
-        Serial.print(dcaclim);
-        Serial.print(" Active: ");
-        Serial.print(activemodules);
-      */
-      Serial.print(" DC total Cur:");
+      Serial.print(" /DC total Cur:");
       Serial.print(totdccur * 0.005, 2);
-      Serial.print(" DC Setpoint:");
+      Serial.print(" /DC Setpoint:");
       Serial.print(parameters.voltSet * 0.01, 0);
+      Serial.print(" /DC driven AC Cur Lim: ");
+      Serial.print(dcaclim);
     }
 
   }
-  //DCcurrentlimit();
+  DCcurrentlimit();
   ACcurrentlimit();
 
   //EVSE automatic control
@@ -1120,8 +1116,13 @@ void ACcurrentlimit()
       slavechargerenable = 0;
     }
   }
+
   if (parameters.phaseconfig == 1)
   {
+    if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
+    {
+      modulelimcur = (dcaclim * 1.5);
+    }
     if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
     {
       modulelimcur = parameters.currReq;
@@ -1129,35 +1130,27 @@ void ACcurrentlimit()
   }
   else
   {
+    if (modulelimcur > (dcaclim * 0.5)) //if more current then max per module or limited by DC output current
+    {
+      modulelimcur = (dcaclim * 0.5);
+    }
     if (modulelimcur > (parameters.currReq / activemodules)) //if evse allows more current then set in parameters limit it
     {
       modulelimcur = (parameters.currReq / activemodules);
     }
   }
-  /*
-    if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
-    {
-    modulelimcur = (dcaclim * 1.5);
-    }
-  */
 }
 
 void DCcurrentlimit()
 {
-  /*
-    totdccur = 1; // 0.005Amp
-    for (int x = 0; x < 3; x++)
-    {
+  totdccur = 0;
+  for (int x = 0; x < 3; x++)
+  {
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
-    if (acvolt[x] > 50 && dcvolt[x] > 50)
-    {
-      activemodules++;
-    }
-    }
-    dcaclim = 0;
-    int x = 2;
-    dcaclim = ((dcvolt[x] * (maxdccur + 400)) / acvolt[x]) / activemodules;
-  */
+  }
+  dcaclim = 0;
+  int x = 2;
+  dcaclim = (((float)dcvolt[x] / (float)acvolt[x]) * (maxdccur*1.2)) ; /// activemodules
 }
 
 void canextdecode(CAN_FRAME & frame)
