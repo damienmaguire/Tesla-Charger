@@ -388,13 +388,18 @@ void loop()
   {
     if (state != 0)
     {
-      if (millis() - tcan > 500)
+      if (millis() - tcan > 2000)
       {
         state = 0;
         Serial.println();
         Serial.println("CAN time-out");
       }
     }
+  }
+
+  if (digitalRead(DIG_IN_1) == LOW)
+  {
+    state = 0;
   }
 
   switch (state)
@@ -606,10 +611,8 @@ void loop()
           break;
 
       }
-      /*
-        Serial.print(" AC limit : ");
-        Serial.print(accurlim);
-      */
+      Serial.print(" AC limit : ");
+      Serial.print(accurlim);
       Serial.print(" /Cable Limit: ");
       Serial.print(cablelim);
       Serial.print(" /Module Cur Request: ");
@@ -634,7 +637,7 @@ void loop()
     if (Proximity == Connected) //check if plugged in
     {
       //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
-      if (modulelimcur > 1400) // one amp or more active modules
+      if (accurlim > 1400) // one amp or more active modules
       {
         if (parameters.autoEnableCharger == 1)
         {
@@ -1102,6 +1105,10 @@ void ACcurrentlimit()
     {
       modulelimcur = (parameters.currReq / 3); // all module parallel, sharing AC input current
     }
+    else
+    {
+      modulelimcur = parameters.currReq;
+    }
   }
   if (parameters.canControl == 1 | parameters.canControl == 2)
   {
@@ -1128,7 +1135,7 @@ void ACcurrentlimit()
       modulelimcur = parameters.currReq;
     }
   }
-  else
+  if (parameters.phaseconfig == 0)
   {
     if (modulelimcur > (dcaclim * 0.5)) //if more current then max per module or limited by DC output current
     {
@@ -1138,6 +1145,10 @@ void ACcurrentlimit()
     {
       modulelimcur = (parameters.currReq / activemodules);
     }
+  }
+  if (parameters.phaseconfig != 0 && parameters.phaseconfig != 1)
+  {
+    modulelimcur =  0;
   }
 }
 
@@ -1150,7 +1161,14 @@ void DCcurrentlimit()
   }
   dcaclim = 0;
   int x = 2;
-  dcaclim = (((float)dcvolt[x] / (float)acvolt[x]) * (maxdccur*1.2)) ; /// activemodules
+  if (totdccur > 0.2)
+  {
+    dcaclim = (((float)dcvolt[x] / (float)acvolt[x]) * (maxdccur * 1.2)) ; /// activemodules
+  }
+  else
+  {
+   dcaclim = 5000;
+  }
 }
 
 void canextdecode(CAN_FRAME & frame)
