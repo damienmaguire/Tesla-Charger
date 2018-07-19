@@ -279,14 +279,20 @@ void loop()
         {
           setting = 1;
           digitalWrite(LED_BUILTIN, HIGH);
-          if (state == 0)
+          if (Serial.parseInt() == 1)
           {
-            state = 2;// initialize modules
-            tboot = millis();
+            if (state == 0)
+            {
+              state = 2;// initialize modules
+              tboot = millis();
+            }
           }
-          if (state == 1)
+          if (Serial.parseInt() == 0)
           {
-            state = 0;// initialize modules
+            if (state == 1)
+            {
+              state = 0;// initialize modules
+            }
           }
         }
         break;
@@ -382,13 +388,18 @@ void loop()
   {
     if (state != 0)
     {
-      if (millis() - tcan > 500)
+      if (millis() - tcan > 2000)
       {
         state = 0;
         Serial.println();
         Serial.println("CAN time-out");
       }
     }
+  }
+
+  if (digitalRead(DIG_IN_1) == LOW)
+  {
+    state = 0;
   }
 
   switch (state)
@@ -520,6 +531,8 @@ void loop()
       Serial.print(state);
       Serial.print(" Phases : ");
       Serial.print(parameters.phaseconfig);
+      Serial.print(" Modules Avtive : ");
+      Serial.print(activemodules);
       if (bChargerEnabled)
       {
         Serial.print(" ON  ");
@@ -598,24 +611,18 @@ void loop()
           break;
 
       }
-      /*
-        Serial.print(" AC limit : ");
-        Serial.print(accurlim);
-      */
-      Serial.print(" Cable Limit: ");
+      Serial.print(" AC limit : ");
+      Serial.print(accurlim);
+      Serial.print(" /Cable Limit: ");
       Serial.print(cablelim);
-      Serial.print(" Module Cur Request: ");
+      Serial.print(" /Module Cur Request: ");
       Serial.print(modulelimcur / 1.5, 0);
-      /*
-        Serial.print(" DC AC Cur Lim: ");
-        Serial.print(dcaclim);
-        Serial.print(" Active: ");
-        Serial.print(activemodules);
-      */
-      Serial.print(" DC total Cur:");
+      Serial.print(" /DC total Cur:");
       Serial.print(totdccur * 0.005, 2);
-      Serial.print(" DC Setpoint:");
+      Serial.print(" /DC Setpoint:");
       Serial.print(parameters.voltSet * 0.01, 0);
+      Serial.print(" /DC driven AC Cur Lim: ");
+      Serial.print(dcaclim);
     }
 
   }
@@ -630,7 +637,7 @@ void loop()
     if (Proximity == Connected) //check if plugged in
     {
       //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
-      if (modulelimcur > 1400) // one amp or more active modules
+      if (accurlim > 1400) // one amp or more active modules
       {
         if (parameters.autoEnableCharger == 1)
         {
@@ -1098,6 +1105,10 @@ void ACcurrentlimit()
     {
       modulelimcur = (parameters.currReq / 3); // all module parallel, sharing AC input current
     }
+    else
+    {
+      modulelimcur = parameters.currReq;
+    }
   }
   if (parameters.canControl == 1 | parameters.canControl == 2)
   {
@@ -1112,44 +1123,52 @@ void ACcurrentlimit()
       slavechargerenable = 0;
     }
   }
+
   if (parameters.phaseconfig == 1)
   {
+    if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
+    {
+      modulelimcur = (dcaclim * 1.5);
+    }
     if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
     {
       modulelimcur = parameters.currReq;
     }
   }
-  else
+  if (parameters.phaseconfig == 0)
   {
+    if (modulelimcur > (dcaclim * 0.5)) //if more current then max per module or limited by DC output current
+    {
+      modulelimcur = (dcaclim * 0.5);
+    }
     if (modulelimcur > (parameters.currReq / activemodules)) //if evse allows more current then set in parameters limit it
     {
-      modulelimcur = (parameters.currReq / 3);
+      modulelimcur = (parameters.currReq / activemodules);
     }
   }
-  /*
-    if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
-    {
-    modulelimcur = (dcaclim * 1.5);
-    }
-  */
+  if (parameters.phaseconfig != 0 && parameters.phaseconfig != 1)
+  {
+    modulelimcur =  0;
+  }
 }
 
 void DCcurrentlimit()
 {
-  /*
-  totdccur = 1; // 0.005Amp
+  totdccur = 0;
   for (int x = 0; x < 3; x++)
   {
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
-    if (acvolt[x] > 50 && dcvolt[x] > 50)
-    {
-      activemodules++;
-    }
   }
   dcaclim = 0;
   int x = 2;
-  dcaclim = ((dcvolt[x] * (maxdccur + 400)) / acvolt[x]) / activemodules;
-  */
+  if (totdccur > 0.2)
+  {
+    dcaclim = (((float)dcvolt[x] / (float)acvolt[x]) * (maxdccur * 1.2)) ; /// activemodules
+  }
+  else
+  {
+   dcaclim = 5000;
+  }
 }
 
 void canextdecode(CAN_FRAME & frame)
