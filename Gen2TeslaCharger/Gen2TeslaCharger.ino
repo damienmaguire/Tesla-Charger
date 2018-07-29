@@ -81,13 +81,14 @@ int newframe = 0;
 ChargerParams parameters;
 
 //*********DCDC Messages VARIABLE   DATA ******************
-bool dcdcenable = 1; // turn on can messages for the DCDC.
+bool dcdcenable = 0; // turn on can messages for the DCDC.
 
 //*********Charger Messages VARIABLE   DATA ******************
 int ControlID = 0x300;
 int StatusID = 0x410;
 unsigned long ElconID = 0x18FF50E5;
 unsigned long ElconControlID = 0x1806E5F4;
+
 
 int candebug = 1;
 
@@ -105,10 +106,10 @@ void setup()
   if (parameters.version != EEPROM_VERSION)
   {
     parameters.version = EEPROM_VERSION;
-    parameters.can0Speed = 500000;
-    parameters.can1Speed = 500000;
     parameters.currReq = 0; //max input limit per module 1500 = 1A
     parameters.enabledChargers = 123; // enable per phase - 123 is all phases - 3 is just phase 3
+    parameters.can0Speed = 500000;
+    parameters.can1Speed = 500000;
     parameters.mainsRelay = 48;
     parameters.voltSet = 32000; //1 = 0.01V
     parameters.autoEnableCharger = 0; //disable auto start, proximity and pilot control
@@ -191,8 +192,9 @@ void loop()
 
   if (Can1.available())
   {
+    //Serial.println();
+    //Serial.print("can 1 data");
     Can1.read(incoming);
-
     canextdecode(incoming);
   }
 
@@ -310,6 +312,32 @@ void loop()
         {
           parameters.currReq = (Serial.parseInt() * 1500);
           setting = 1;
+        }
+        break;
+
+      case '0': //c for current setting in whole numbers
+        if (Serial.available() > 0)
+        {
+          parameters.can0Speed = long(Serial.parseInt() * 1000);
+          setting = 1;
+          Serial.println();
+          Serial.print(parameters.can0Speed);
+          Serial.print(",");
+          Can1.begin(parameters.can0Speed);
+          Serial.print(Can0.getBusSpeed());
+        }
+        break;
+
+      case '1': //c for current setting in whole numbers
+        if (Serial.available() > 0)
+        {
+          parameters.can1Speed = long(Serial.parseInt() * 1000);
+          setting = 1;
+          Serial.println();
+          Serial.print(parameters.can1Speed);
+          Serial.print(",");
+          Can1.begin(parameters.can1Speed);
+          Serial.print(Can1.getBusSpeed());
         }
         break;
 
@@ -639,15 +667,12 @@ void loop()
       //digitalWrite(EVSE_ACTIVATE, HIGH);//pull pilot low to indicate ready - NOT WORKING freezes PWM reading
       if (accurlim > 1400) // one amp or more active modules
       {
-        if (parameters.autoEnableCharger == 1)
+        if (state == 0)
         {
-          if (state == 0)
+          if (digitalRead(DIG_IN_1) == HIGH)
           {
-            if (digitalRead(DIG_IN_1) == HIGH)
-            {
-              state = 2;// initialize modules
-              tboot = millis();
-            }
+            state = 2;// initialize modules
+            tboot = millis();
           }
         }
       }
@@ -945,6 +970,11 @@ void Charger_msgs()
   /////////Elcon Message////////////
 
   outframe.id = ElconID;
+  if ( parameters.canControl == 3)
+  {
+    outframe.id = ElconID + 1;
+  }
+  outframe.id = ElconID;
   outframe.length = 8;            // Data payload 8 bytes
   outframe.extended = 1;          // Extended addresses - 0=11-bit 1=29bit
   outframe.rtr = 0;                 //No request
@@ -1167,7 +1197,7 @@ void DCcurrentlimit()
   }
   else
   {
-   dcaclim = 5000;
+    dcaclim = 5000;
   }
 }
 
