@@ -204,6 +204,27 @@ void loop()
 
     switch (incomingByte)
     {
+      case 'd'://d for display
+        Serial.println();
+        Serial.print(" a ");
+        Serial.println(parameters.autoEnableCharger);
+        Serial.print(" e ");
+        Serial.println(parameters.enabledChargers);
+        Serial.print(" x ");
+        Serial.println(parameters.canControl);
+        Serial.print(" t ");
+        Serial.println(parameters.type);
+        Serial.print(" p ");
+        Serial.println(parameters.phaseconfig + 1);
+        Serial.print(" 0 ");
+        Serial.println(parameters.can0Speed * 0.001, 0);
+        Serial.print(" 1 ");
+        Serial.println(parameters.can1Speed * 0.001, 0);
+        Serial.print(" v ");
+        Serial.println(parameters.voltSet * 0.01, 0);
+        Serial.print(" c ");
+        Serial.println(parameters.currReq / 1500, 0);
+        break;
       case 'a'://a for auto enable
         if (Serial.available() > 0)
         {
