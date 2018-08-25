@@ -1,3 +1,5 @@
+
+
 /*
   Tesla Gen 2 Charger Control Program
   2017-2018
@@ -31,6 +33,9 @@ int incomingByte = 0;
 int state;
 unsigned long slavetimeout, tlast, tcan, tboot = 0;
 bool bChargerEnabled;
+
+
+//**************Sleep Variables****************
 
 //*********EVSE VARIABLE   DATA ******************
 byte Proximity = 0;
@@ -90,11 +95,30 @@ unsigned long ElconID = 0x18FF50E5;
 unsigned long ElconControlID = 0x1806E5F4;
 
 
-int candebug = 1;
-
+int candebug = 0;
 
 void setup()
 {
+  pmc_set_writeprotect(false);
+  pmc_mck_set_prescaler(16); 
+
+  // 12MHz / 64 * 14 = 2.625MHz //  96 = 110 << 4 = /64
+  // 12MHz / 32 * 14 = 5.25 MHz //  80 = 101 << 4 = /32
+  // 12MHz / 16 * 14 = 10.5 MHz //  64 = 100 << 4 = /16
+  // 12MHz /  8 * 14 = 21   MHz //  48 = 011 << 4 = /8
+  // 12MHz /  4 * 14 = 42   MHz //  32 = 010 << 4 = /4
+  // 12MHz /  2 * 14 = 84   MHz //  16 = 001 << 4 = /2 (default)
+
+  pmc_disable_periph_clk(22);  // TWI/I2C bus 0 (i.MX6 controlling)
+  pmc_disable_periph_clk(23);  // TWI/I2C bus 1
+  pmc_disable_periph_clk(24);  // SPI0
+  pmc_disable_periph_clk(25);  // SPI1
+  pmc_disable_periph_clk(26);  // SSC (I2S digital audio, N/C)
+
+  pmc_disable_periph_clk(41);  // random number generator
+  pmc_disable_periph_clk(42);  // ethernet MAC - N/C
+
+
   Serial.begin(115200);  //Initialize our USB port which will always be redefined as SerialUSB to use the Native USB port tied directly to the SAM3X processor.
 
   Timer3.attachInterrupt(Charger_msgs).start(90000); // charger messages every 100ms
@@ -178,6 +202,7 @@ void setup()
   dcaclim = maxaccur;
 
   bChargerEnabled = false; //are we supposed to command the charger to charge?
+  //
 }
 
 void loop()
@@ -223,7 +248,7 @@ void loop()
         Serial.print(" v ");
         Serial.println(parameters.voltSet * 0.01, 0);
         Serial.print(" c ");
-        Serial.println(parameters.currReq / 1500, 0);
+        Serial.println(parameters.currReq/1500);
         break;
       case 'a'://a for auto enable
         if (Serial.available() > 0)
@@ -763,7 +788,7 @@ void candecode(CAN_FRAME & frame)
 
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6)) ;
+      accur[0] = uint16_t((frame.data.bytes[5]*256+frame.data.bytes[6] >> 6) & 0x1FF) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -795,7 +820,7 @@ void candecode(CAN_FRAME & frame)
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6)) ;
+      accur[1] = uint16_t((frame.data.bytes[5]*256+frame.data.bytes[6] >> 6) & 0x1FF) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -827,7 +852,7 @@ void candecode(CAN_FRAME & frame)
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = (uint16_t((frame.data.bytes[5] & 0x7F) << 2) | uint16_t(frame.data.bytes[6] >> 6)) ;
+      accur[2] = uint16_t((frame.data.bytes[5]*256+frame.data.bytes[6] >> 6) & 0x1FF) ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -1175,6 +1200,7 @@ void ACcurrentlimit()
     }
   }
 
+/*
   if (parameters.phaseconfig == 1)
   {
     if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
@@ -1197,6 +1223,7 @@ void ACcurrentlimit()
       modulelimcur = (parameters.currReq / activemodules);
     }
   }
+  */
   if (parameters.phaseconfig != 0 && parameters.phaseconfig != 1)
   {
     modulelimcur =  0;
