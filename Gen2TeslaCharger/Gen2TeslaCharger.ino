@@ -100,7 +100,7 @@ int candebug = 0;
 void setup()
 {
   pmc_set_writeprotect(false);
-  pmc_mck_set_prescaler(16); 
+  pmc_mck_set_prescaler(16);
 
   // 12MHz / 64 * 14 = 2.625MHz //  96 = 110 << 4 = /64
   // 12MHz / 32 * 14 = 5.25 MHz //  80 = 101 << 4 = /32
@@ -248,7 +248,7 @@ void loop()
         Serial.print(" v ");
         Serial.println(parameters.voltSet * 0.01, 0);
         Serial.print(" c ");
-        Serial.println(parameters.currReq/1500);
+        Serial.println(parameters.currReq / 1500);
         break;
       case 'a'://a for auto enable
         if (Serial.available() > 0)
@@ -638,8 +638,8 @@ void loop()
           Serial.print(acvolt[x]);
           Serial.print("  AC cur: ");
           Serial.print((accur[x] * 0.06666), 2);
-          Serial.print("  ");
-          Serial.print(accur[x]);
+          //Serial.print("  ");
+          ///Serial.print(accur[x], HEX); ///not needed since current fixed
           Serial.print("  DC volt: ");
           Serial.print(dcvolt[x]);
           Serial.print("  DC cur: ");
@@ -788,7 +788,7 @@ void candecode(CAN_FRAME & frame)
 
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = uint16_t((frame.data.bytes[5]*256+frame.data.bytes[6] >> 6) & 0x1FF) ;
+      accur[0] = frame.data.bytes[5] >> 1 ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -820,7 +820,7 @@ void candecode(CAN_FRAME & frame)
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = uint16_t((frame.data.bytes[5]*256+frame.data.bytes[6] >> 6) & 0x1FF) ;
+      accur[1] = frame.data.bytes[5] >> 1 ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -852,7 +852,8 @@ void candecode(CAN_FRAME & frame)
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = uint16_t((frame.data.bytes[5]*256+frame.data.bytes[6] >> 6) & 0x1FF) ;
+      accur[2] = frame.data.bytes[5] >> 1 ;
+
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -1200,13 +1201,12 @@ void ACcurrentlimit()
     }
   }
 
-/*
   if (parameters.phaseconfig == 1)
   {
-    if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
-    {
-      modulelimcur = (dcaclim * 1.5);
-    }
+    /* if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
+      {
+       modulelimcur = (dcaclim * 1.5);
+      }*/
     if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
     {
       modulelimcur = parameters.currReq;
@@ -1214,16 +1214,15 @@ void ACcurrentlimit()
   }
   if (parameters.phaseconfig == 0)
   {
-    if (modulelimcur > (dcaclim * 0.5)) //if more current then max per module or limited by DC output current
-    {
-      modulelimcur = (dcaclim * 0.5);
-    }
+    /* if (modulelimcur > (dcaclim * 0.5)) //if more current then max per module or limited by DC output current
+      {
+       modulelimcur = (dcaclim * 0.5);
+      }*/
     if (modulelimcur > (parameters.currReq / activemodules)) //if evse allows more current then set in parameters limit it
     {
       modulelimcur = (parameters.currReq / activemodules);
     }
   }
-  */
   if (parameters.phaseconfig != 0 && parameters.phaseconfig != 1)
   {
     modulelimcur =  0;
