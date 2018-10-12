@@ -15,12 +15,22 @@
 #include <Wire_EEPROM.h>
 #include <DueTimer.h>
 #include "config.h"
+#include <movingAvg.h>
+
 
 #define Serial SerialUSB
 template<class T> inline Print &operator <<(Print &obj, T arg) {
   obj.print(arg);
   return obj;
 }
+
+movingAvg avgdcaclim(20);
+
+
+int watchdogTime = 1000;
+
+
+
 
 //*********GENERAL VARIABLE   DATA ******************
 int debugevse = 1; // 1 = show Proximity status and Pilot current limmits
@@ -97,6 +107,12 @@ unsigned long ElconControlID = 0x1806E5F4;
 
 int candebug = 0;
 
+// this function has to be present, otherwise watchdog won't work
+void watchdogSetup(void) 
+{
+// do what you want here
+}
+
 void setup()
 {
   pmc_set_writeprotect(false);
@@ -124,7 +140,7 @@ void setup()
   Timer3.attachInterrupt(Charger_msgs).start(90000); // charger messages every 100ms
 
   attachInterrupt(EVSE_PILOT, Pilotread , CHANGE);
-
+watchdogEnable(watchdogTime);
   Wire.begin();
   EEPROM.read(0, parameters);
   if (parameters.version != EEPROM_VERSION)
@@ -200,7 +216,7 @@ void setup()
   ///////////////////////////////////////////////////////////////////////////////////////
 
   dcaclim = maxaccur;
-
+  avgdcaclim.begin();
   bChargerEnabled = false; //are we supposed to command the charger to charge?
   //
 }
@@ -597,6 +613,7 @@ void loop()
   if (tlast <  (millis() - 500))
   {
     tlast = millis();
+    watchdogReset();
     if (debug != 0)
     {
       Serial.println();
@@ -788,7 +805,7 @@ void candecode(CAN_FRAME & frame)
 
     case 0x207: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[0] = frame.data.bytes[1];
-      accur[0] = uint16_t((frame.data.bytes[6]& 0x03)*256 + frame.data.bytes[5]) >> 1 ;
+      accur[0] = uint16_t((frame.data.bytes[6] & 0x03) * 256 + frame.data.bytes[5]) >> 1 ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -820,7 +837,7 @@ void candecode(CAN_FRAME & frame)
       break;
     case 0x209: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[1] = frame.data.bytes[1];
-      accur[1] = uint16_t((frame.data.bytes[6]& 0x03)*256 + frame.data.bytes[5]) >> 1 ;
+      accur[1] = uint16_t((frame.data.bytes[6] & 0x03) * 256 + frame.data.bytes[5]) >> 1 ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -852,7 +869,7 @@ void candecode(CAN_FRAME & frame)
       break;
     case 0x20B: //phase 2 msg 0x209. phase 3 msg 0x20B
       acvolt[2] = frame.data.bytes[1];
-      accur[2] = uint16_t((frame.data.bytes[6]& 0x03)*256 + frame.data.bytes[5]) >> 1 ;
+      accur[2] = uint16_t((frame.data.bytes[6] & 0x03) * 256 + frame.data.bytes[5]) >> 1 ;
       x = frame.data.bytes[2] & 12;
       if (x != 0)
       {
@@ -1202,10 +1219,10 @@ void ACcurrentlimit()
 
   if (parameters.phaseconfig == 1)
   {
-    /* if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
-      {
-       modulelimcur = (dcaclim * 1.5);
-      }*/
+    if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
+    {
+     // modulelimcur = (dcaclim * 1.5);
+    }
     if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
     {
       modulelimcur = parameters.currReq;
@@ -1213,10 +1230,10 @@ void ACcurrentlimit()
   }
   if (parameters.phaseconfig == 0)
   {
-    /* if (modulelimcur > (dcaclim * 0.5)) //if more current then max per module or limited by DC output current
-      {
-       modulelimcur = (dcaclim * 0.5);
-      }*/
+    if (modulelimcur > (dcaclim * 0.5)) //if more current then max per module or limited by DC output current
+    {
+      //modulelimcur = (dcaclim * 0.5);
+    }
     if (modulelimcur > (parameters.currReq / activemodules)) //if evse allows more current then set in parameters limit it
     {
       modulelimcur = (parameters.currReq / activemodules);
@@ -1236,7 +1253,7 @@ void DCcurrentlimit()
     totdccur = totdccur + (dccur[x] * 0.1678466) ;
   }
   dcaclim = 0;
-  int x = 2;
+  int x = 0;
   if (totdccur > 0.2)
   {
     dcaclim = (((float)dcvolt[x] / (float)acvolt[x]) * (maxdccur * 1.2)) ; /// activemodules
@@ -1245,6 +1262,7 @@ void DCcurrentlimit()
   {
     dcaclim = 5000;
   }
+  dcaclim = avgdcaclim.reading(dcaclim);
 }
 
 void canextdecode(CAN_FRAME & frame)
