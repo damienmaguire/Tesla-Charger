@@ -15,7 +15,6 @@
 #include <Wire_EEPROM.h>
 #include <DueTimer.h>
 #include "config.h"
-#include <movingAvg.h>
 
 
 #define Serial SerialUSB
@@ -24,7 +23,6 @@ template<class T> inline Print &operator <<(Print &obj, T arg) {
   return obj;
 }
 
-movingAvg avgdcaclim(20);
 
 
 int watchdogTime = 1000;
@@ -216,7 +214,6 @@ watchdogEnable(watchdogTime);
   ///////////////////////////////////////////////////////////////////////////////////////
 
   dcaclim = maxaccur;
-  avgdcaclim.begin();
   bChargerEnabled = false; //are we supposed to command the charger to charge?
   //
 }
@@ -1262,7 +1259,6 @@ void DCcurrentlimit()
   {
     dcaclim = 5000;
   }
-  dcaclim = avgdcaclim.reading(dcaclim);
 }
 
 void canextdecode(CAN_FRAME & frame)
