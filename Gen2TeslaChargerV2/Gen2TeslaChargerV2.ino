@@ -15,7 +15,7 @@
 #include <Wire_EEPROM.h>
 #include <DueTimer.h>
 #include "config.h"
-
+#include <rtc_clock.h> ///https://github.com/MarkusLange/Arduino-Due-RTC-Library
 
 #define Serial SerialUSB
 template<class T> inline Print &operator <<(Print &obj, T arg) {
@@ -23,11 +23,11 @@ template<class T> inline Print &operator <<(Print &obj, T arg) {
   return obj;
 }
 
+//RTC_clock rtc_clock(XTAL);
 
+int watchdogTime = 8000;
 
-int watchdogTime = 5000;
-
-
+char* daynames[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 
 
 //*********GENERAL VARIABLE   DATA ******************
@@ -158,6 +158,13 @@ void setup()
     parameters.type = 2; //Socket type1 or 2
     EEPROM.write(0, parameters);
   }
+  /*
+    ////rtc clock start///////
+
+    rtc_clock.init();
+    rtc_clock.set_time(19, 35, 0);
+    rtc_clock.set_date(16, 11, 2018);
+  */
 
   // Initialize CAN ports
   if (Can1.begin(parameters.can1Speed, 255)) //can1 external bus
@@ -1256,6 +1263,24 @@ void menu()
           incomingByte = 'd';
         }
         break;
+        /*
+      case 'c': //c for time
+        if (Serial.available() > 0)
+        {
+          rtc_clock.set_time(Serial.parseInt(), Serial.parseInt(), Serial.parseInt());
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+      case 'd': //c for time
+        if (Serial.available() > 0)
+        {
+          rtc_clock.set_date(Serial.parseInt(), Serial.parseInt(), Serial.parseInt());
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+        */
     }
   }
 
@@ -1286,6 +1311,7 @@ void menu()
         }
 
       case 'q': //q for quit
+        EEPROM.write(0, parameters);
         debug = 1;
         menuload = 0;
         break;
@@ -1358,130 +1384,24 @@ void menu()
         {
           Serial.println("OFF");
         }
+        /*
+          Serial.print("c - time : ");
+          Serial.print(rtc_clock.get_hours());
+          Serial.print(":");
+          Serial.print(rtc_clock.get_minutes());
+          Serial.print(":");
+          Serial.println(rtc_clock.get_seconds());
+          Serial.print("d - date : ");
+          Serial.print(daynames[rtc_clock.get_day_of_week() - 1]);
+          Serial.print(": ");
+          Serial.print(rtc_clock.get_days());
+          Serial.print(".");
+          Serial.print(rtc_clock.get_months());
+          Serial.print(".");
+          Serial.println(rtc_clock.get_years());
+        */
         Serial.println("q - To Quit Menu");
         break;
     }
   }
 }
-
-
-
-/*
-
-  case 'm'://m for dc current setting in whole numbers
-  if (Serial.available() > 0)
-  {
-    maxdccur = (Serial.parseInt() * 1000);
-    setting = 1;
-  }
-  break;
-
-
-
-  case 'c': //c for current setting in whole numbers
-  if (Serial.available() > 0)
-  {
-    parameters.currReq = (Serial.parseInt() * 1500);
-    setting = 1;
-  }
-  break;
-
-  case '0': //c for current setting in whole numbers
-  if (Serial.available() > 0)
-  {
-    parameters.can0Speed = long(Serial.parseInt() * 1000);
-    setting = 1;
-    Serial.println();
-    Serial.print(parameters.can0Speed);
-    Serial.print(",");
-    Can1.begin(parameters.can0Speed);
-    Serial.print(Can0.getBusSpeed());
-  }
-  break;
-
-  case '1': //c for current setting in whole numbers
-  if (Serial.available() > 0)
-  {
-    parameters.can1Speed = long(Serial.parseInt() * 1000);
-    setting = 1;
-    Serial.println();
-    Serial.print(parameters.can1Speed);
-    Serial.print(",");
-    Can1.begin(parameters.can1Speed);
-    Serial.print(Can1.getBusSpeed());
-  }
-  break;
-
-  default:
-  // if nothing else matches, do the default
-  // default is optional
-  break;
-  }
-  }
-
-  if (setting == 1) //display if any setting changed
-  {
-  EEPROM.write(0, parameters);
-  Serial.println();
-  Serial.println();
-  if (state == 1)
-  {
-    Serial.print("Charger On   ");
-  }
-  else
-  {
-    Serial.print("Charger Off   ");
-  }
-  Serial.print("Enabled Modules : ");
-  Serial.print(parameters.enabledChargers);
-  Serial.print(" Phases : ");
-  Serial.print(parameters.phaseconfig);
-  Serial.print("Set voltage : ");
-  Serial.print(parameters.voltSet * 0.01f, 0);
-  Serial.print("V | Set current lim AC : ");
-  Serial.print(parameters.currReq * 0.00066666, 0);
-  Serial.print(" A DC :");
-  Serial.print(maxdccur * 0.001, 1);
-  Serial.print(" A ");
-  if (parameters.autoEnableCharger == 1)
-  {
-    Serial.print(" Autostart On   ");
-  }
-  else
-  {
-    Serial.print(" Autostart Off   ");
-  }
-  if (parameters.canControl == 1)
-  {
-    Serial.print(" Can Mode: Master ");
-  }
-  if (parameters.canControl == 2)
-  {
-    Serial.print(" Can Mode: Master Elcon ");
-  }
-  if (parameters.canControl == 3)
-  {
-    Serial.print(" Can Mode: Slave ");
-  }
-  if (parameters.phaseconfig == Singlephase)
-  {
-    Serial.print(" Single Phase ");
-  }
-  if (parameters.phaseconfig == Threephase)
-  {
-    Serial.print(" Three Phase ");
-  }
-  if (parameters.type == 1)
-  {
-    Serial.print(" Type 1 ");
-  }
-  if (parameters.type == 2)
-  {
-    Serial.print(" Type 2 ");
-  }
-  setting = 0;
-  Serial.println();
-  Serial.println();
-  }
-  }
-*/
