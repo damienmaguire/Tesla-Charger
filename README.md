@@ -35,4 +35,6 @@ Changed to a Vertical type B USB socket.
 
 02/05/18 : V3 board and new software tested and working in my BMW E31 project car.
 
+03/01/19 : Added an excellent user manual for the V3 logic board compiled by EVWest.
+
 Enjoy!
