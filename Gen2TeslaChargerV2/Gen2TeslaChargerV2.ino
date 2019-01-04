@@ -15,7 +15,7 @@
 #include <Wire_EEPROM.h>
 #include <DueTimer.h>
 #include "config.h"
-
+#include <rtc_clock.h> ///https://github.com/MarkusLange/Arduino-Due-RTC-Library
 
 #define Serial SerialUSB
 template<class T> inline Print &operator <<(Print &obj, T arg) {
@@ -23,15 +23,15 @@ template<class T> inline Print &operator <<(Print &obj, T arg) {
   return obj;
 }
 
+//RTC_clock rtc_clock(XTAL);
 
+int watchdogTime = 8000;
 
-int watchdogTime = 1000;
-
-
+char* daynames[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 
 
 //*********GENERAL VARIABLE   DATA ******************
-int debugevse = 1; // 1 = show Proximity status and Pilot current limmits
+int evsedebug = 1; // 1 = show Proximity status and Pilot current limmits
 int debug = 1; // 1 = show phase module CAN feedback
 
 
@@ -104,11 +104,12 @@ unsigned long ElconControlID = 0x1806E5F4;
 
 
 int candebug = 0;
+int menuload = 0;
 
 // this function has to be present, otherwise watchdog won't work
-void watchdogSetup(void) 
+void watchdogSetup(void)
 {
-// do what you want here
+  // do what you want here
 }
 
 void setup()
@@ -138,7 +139,7 @@ void setup()
   Timer3.attachInterrupt(Charger_msgs).start(90000); // charger messages every 100ms
 
   attachInterrupt(EVSE_PILOT, Pilotread , CHANGE);
-watchdogEnable(watchdogTime);
+  watchdogEnable(watchdogTime);
   Wire.begin();
   EEPROM.read(0, parameters);
   if (parameters.version != EEPROM_VERSION)
@@ -157,6 +158,13 @@ watchdogEnable(watchdogTime);
     parameters.type = 2; //Socket type1 or 2
     EEPROM.write(0, parameters);
   }
+  /*
+    ////rtc clock start///////
+
+    rtc_clock.init();
+    rtc_clock.set_time(19, 35, 0);
+    rtc_clock.set_date(16, 11, 2018);
+  */
 
   // Initialize CAN ports
   if (Can1.begin(parameters.can1Speed, 255)) //can1 external bus
@@ -238,239 +246,9 @@ void loop()
 
   if (Serial.available())
   {
-    incomingByte = Serial.read(); // read the incoming byte:
-
-    switch (incomingByte)
-    {
-      case 'd'://d for display
-        Serial.println();
-        Serial.print(" a ");
-        Serial.println(parameters.autoEnableCharger);
-        Serial.print(" e ");
-        Serial.println(parameters.enabledChargers);
-        Serial.print(" x ");
-        Serial.println(parameters.canControl);
-        Serial.print(" t ");
-        Serial.println(parameters.type);
-        Serial.print(" p ");
-        Serial.println(parameters.phaseconfig + 1);
-        Serial.print(" 0 ");
-        Serial.println(parameters.can0Speed * 0.001, 0);
-        Serial.print(" 1 ");
-        Serial.println(parameters.can1Speed * 0.001, 0);
-        Serial.print(" v ");
-        Serial.println(parameters.voltSet * 0.01, 0);
-        Serial.print(" c ");
-        Serial.println(parameters.currReq / 1500);
-        break;
-      case 'a'://a for auto enable
-        if (Serial.available() > 0)
-        {
-          parameters.autoEnableCharger = Serial.parseInt();
-          if (parameters.autoEnableCharger > 1)
-          {
-            parameters.autoEnableCharger = 0;
-          }
-          setting = 1;
-        }
-        break;
-
-      case 'p'://a for can control enable
-        if (Serial.available() > 0)
-        {
-          parameters.phaseconfig = Serial.parseInt() - 1;
-          if ( parameters.phaseconfig == 2)
-          {
-            parameters.phaseconfig = 1;
-          }
-          if (parameters.phaseconfig == 0)
-          {
-            parameters.phaseconfig = 0;
-          }
-          setting = 1;
-        }
-        break;
-
-      case 't'://t for type
-        if (Serial.available() > 0)
-        {
-          parameters.type = Serial.parseInt();
-          if (parameters.type > 2)
-          {
-            parameters.type = 2;
-          }
-          if (parameters.type == 0)
-          {
-            parameters.type = 2;
-          }
-          setting = 1;
-        }
-        break;
-
-      case 'x'://a for can control enable
-        if (Serial.available() > 0)
-        {
-          parameters.canControl = Serial.parseInt();
-          if (parameters.canControl > 3)
-          {
-            parameters.canControl = 0;
-          }
-          setting = 1;
-        }
-        break;
-
-      case 'm'://m for dc current setting in whole numbers
-        if (Serial.available() > 0)
-        {
-          maxdccur = (Serial.parseInt() * 1000);
-          setting = 1;
-        }
-        break;
-
-      case 'v'://v for voltage setting in whole numbers
-        if (Serial.available() > 0)
-        {
-          parameters.voltSet = (Serial.parseInt() * 100);
-          setting = 1;
-        }
-        break;
-
-      case 's'://s for start AND stop
-        if (Serial.available() > 0)
-        {
-          setting = 1;
-          digitalWrite(LED_BUILTIN, HIGH);
-          if (Serial.parseInt() == 1)
-          {
-            if (state == 0)
-            {
-              state = 2;// initialize modules
-              tboot = millis();
-            }
-          }
-          if (Serial.parseInt() == 0)
-          {
-            if (state == 1)
-            {
-              state = 0;// initialize modules
-            }
-          }
-        }
-        break;
-
-      case 'e'://e for enabling chargers followed by numbers to indicate which ones to run
-        if (Serial.available() > 0)
-        {
-          parameters.enabledChargers = Serial.parseInt();
-          setting = 1;
-        }
-        break;
-
-      case 'c': //c for current setting in whole numbers
-        if (Serial.available() > 0)
-        {
-          parameters.currReq = (Serial.parseInt() * 1500);
-          setting = 1;
-        }
-        break;
-
-      case '0': //c for current setting in whole numbers
-        if (Serial.available() > 0)
-        {
-          parameters.can0Speed = long(Serial.parseInt() * 1000);
-          setting = 1;
-          Serial.println();
-          Serial.print(parameters.can0Speed);
-          Serial.print(",");
-          Can1.begin(parameters.can0Speed);
-          Serial.print(Can0.getBusSpeed());
-        }
-        break;
-
-      case '1': //c for current setting in whole numbers
-        if (Serial.available() > 0)
-        {
-          parameters.can1Speed = long(Serial.parseInt() * 1000);
-          setting = 1;
-          Serial.println();
-          Serial.print(parameters.can1Speed);
-          Serial.print(",");
-          Can1.begin(parameters.can1Speed);
-          Serial.print(Can1.getBusSpeed());
-        }
-        break;
-
-      default:
-        // if nothing else matches, do the default
-        // default is optional
-        break;
-    }
+    menu();
   }
 
-  if (setting == 1) //display if any setting changed
-  {
-    EEPROM.write(0, parameters);
-    Serial.println();
-    Serial.println();
-    if (state == 1)
-    {
-      Serial.print("Charger On   ");
-    }
-    else
-    {
-      Serial.print("Charger Off   ");
-    }
-    Serial.print("Enabled Modules : ");
-    Serial.print(parameters.enabledChargers);
-    Serial.print(" Phases : ");
-    Serial.print(parameters.phaseconfig);
-    Serial.print("Set voltage : ");
-    Serial.print(parameters.voltSet * 0.01f, 0);
-    Serial.print("V | Set current lim AC : ");
-    Serial.print(parameters.currReq * 0.00066666, 0);
-    Serial.print(" A DC :");
-    Serial.print(maxdccur * 0.001, 1);
-    Serial.print(" A ");
-    if (parameters.autoEnableCharger == 1)
-    {
-      Serial.print(" Autostart On   ");
-    }
-    else
-    {
-      Serial.print(" Autostart Off   ");
-    }
-    if (parameters.canControl == 1)
-    {
-      Serial.print(" Can Mode: Master ");
-    }
-    if (parameters.canControl == 2)
-    {
-      Serial.print(" Can Mode: Master Elcon ");
-    }
-    if (parameters.canControl == 3)
-    {
-      Serial.print(" Can Mode: Slave ");
-    }
-    if (parameters.phaseconfig == Singlephase)
-    {
-      Serial.print(" Single Phase ");
-    }
-    if (parameters.phaseconfig == Threephase)
-    {
-      Serial.print(" Three Phase ");
-    }
-    if (parameters.type == 1)
-    {
-      Serial.print(" Type 1 ");
-    }
-    if (parameters.type == 2)
-    {
-      Serial.print(" Type 2 ");
-    }
-    setting = 0;
-    Serial.println();
-    Serial.println();
-  }
   if (parameters.canControl > 1)
   {
     if (state != 0)
@@ -682,35 +460,38 @@ void loop()
         Serial.println();
       }
     }
-    if (debugevse != 0)
+    if (debug == 1)
     {
-      Serial.println();
-      Serial.print("  Proximity Status : ");
-      switch (Proximity)
+      if (evsedebug != 0)
       {
-        case Unconnected:
-          Serial.print("Unconnected");
-          break;
-        case Buttonpress:
-          Serial.print("Button Pressed");
-          break;
-        case Connected:
-          Serial.print("Connected");
-          break;
+        Serial.println();
+        Serial.print("  Proximity Status : ");
+        switch (Proximity)
+        {
+          case Unconnected:
+            Serial.print("Unconnected");
+            break;
+          case Buttonpress:
+            Serial.print("Button Pressed");
+            break;
+          case Connected:
+            Serial.print("Connected");
+            break;
 
+        }
+        Serial.print(" AC limit : ");
+        Serial.print(accurlim);
+        Serial.print(" /Cable Limit: ");
+        Serial.print(cablelim);
+        Serial.print(" /Module Cur Request: ");
+        Serial.print(modulelimcur / 1.5, 0);
+        Serial.print(" /DC total Cur:");
+        Serial.print(totdccur * 0.005, 2);
+        Serial.print(" /DC Setpoint:");
+        Serial.print(parameters.voltSet * 0.01, 0);
+        Serial.print(" /DC driven AC Cur Lim: ");
+        Serial.print(dcaclim);
       }
-      Serial.print(" AC limit : ");
-      Serial.print(accurlim);
-      Serial.print(" /Cable Limit: ");
-      Serial.print(cablelim);
-      Serial.print(" /Module Cur Request: ");
-      Serial.print(modulelimcur / 1.5, 0);
-      Serial.print(" /DC total Cur:");
-      Serial.print(totdccur * 0.005, 2);
-      Serial.print(" /DC Setpoint:");
-      Serial.print(parameters.voltSet * 0.01, 0);
-      Serial.print(" /DC driven AC Cur Lim: ");
-      Serial.print(dcaclim);
     }
 
   }
@@ -1218,7 +999,7 @@ void ACcurrentlimit()
   {
     if (modulelimcur > (dcaclim * 1.5)) //if more current then max per module or limited by DC output current
     {
-     // modulelimcur = (dcaclim * 1.5);
+      // modulelimcur = (dcaclim * 1.5);
     }
     if (modulelimcur > parameters.currReq) //if evse allows more current then set in parameters limit it
     {
@@ -1283,17 +1064,20 @@ void canextdecode(CAN_FRAME & frame)
       {
         state = 0;
       }
-      if (candebug == 1)
+      if (debug == 1)
       {
-        Serial.println();
-        Serial.print( state);
-        Serial.print(" ");
-        Serial.print(parameters.voltSet);
-        Serial.print(" ");
-        Serial.print(modulelimcur);
-        Serial.println();
+        if (candebug == 1)
+        {
+          Serial.println();
+          Serial.print( state);
+          Serial.print(" ");
+          Serial.print(parameters.voltSet);
+          Serial.print(" ");
+          Serial.print(modulelimcur);
+          Serial.println();
+        }
+        tcan = millis();
       }
-      tcan = millis();
     }
   }
 
@@ -1323,20 +1107,301 @@ void canextdecode(CAN_FRAME & frame)
       parameters.voltSet = (frame.data.bytes[1] << 8) + frame.data.bytes[2];
       maxdccur = (frame.data.bytes[3] << 8) + frame.data.bytes[4];
       modulelimcur  = (frame.data.bytes[5] << 8) + frame.data.bytes[6];
-      if (candebug == 1)
+      if (debug == 1)
       {
-        Serial.println();
-        Serial.print( state);
-        Serial.print(" ");
-        Serial.print(parameters.voltSet);
-        Serial.print(" ");
-        Serial.print(modulelimcur);
-        Serial.println();
+        if (candebug == 1)
+        {
+          Serial.println();
+          Serial.print( state);
+          Serial.print(" ");
+          Serial.print(parameters.voltSet);
+          Serial.print(" ");
+          Serial.print(modulelimcur);
+          Serial.println();
+        }
       }
-
       tcan = millis();
     }
+
   }
 
 }
 
+void menu()
+{
+  incomingByte = Serial.read(); // read the incoming byte:
+  if (menuload == 1)
+  {
+    switch (incomingByte)
+    {
+      case 'q': //q for quit
+        debug = 1;
+        menuload = 0;
+        break;
+
+      case 'a'://a for auto enable
+        candebug ++;
+        if (candebug > 1)
+        {
+          candebug = 0;
+        }
+        menuload = 0;
+        incomingByte = 'd';
+        break;
+
+      case 'b'://a for auto enable
+        evsedebug ++;
+        if (evsedebug > 1)
+        {
+          evsedebug = 0;
+        }
+        menuload = 0;
+        incomingByte = 'd';
+        break;
+
+
+      case '1'://a for auto enable
+        parameters.autoEnableCharger ++;
+        if (parameters.autoEnableCharger > 1)
+        {
+          parameters.autoEnableCharger = 0;
+        }
+        menuload = 0;
+        incomingByte = 'd';
+        break;
+
+      case '2'://e for enabling chargers followed by numbers to indicate which ones to run
+        if (Serial.available() > 0)
+        {
+          parameters.enabledChargers = Serial.parseInt();
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+
+      case '3'://a for can control enable
+        if (Serial.available() > 0)
+        {
+          parameters.canControl = Serial.parseInt();
+          if (parameters.canControl > 3)
+          {
+            parameters.canControl = 0;
+          }
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+
+      case '4'://t for type
+        if (Serial.available() > 0)
+        {
+          parameters.type = Serial.parseInt();
+          if (parameters.type > 2)
+          {
+            parameters.type = 2;
+          }
+          if (parameters.type == 0)
+          {
+            parameters.type = 2;
+          }
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+
+      case '5'://a for can control enable
+        if (Serial.available() > 0)
+        {
+          parameters.phaseconfig = Serial.parseInt() - 1;
+          if ( parameters.phaseconfig == 2)
+          {
+            parameters.phaseconfig = 1;
+          }
+          if (parameters.phaseconfig == 0)
+          {
+            parameters.phaseconfig = 0;
+          }
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+      case '6'://v for voltage setting in whole numbers
+        if (Serial.available() > 0)
+        {
+          parameters.voltSet = (Serial.parseInt() * 100);
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+
+      case '7': //c for current setting in whole numbers
+        if (Serial.available() > 0)
+        {
+          parameters.currReq = (Serial.parseInt() * 1500);
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+
+      case '8': //c for current setting in whole numbers
+        if (Serial.available() > 0)
+        {
+          parameters.can0Speed = long(Serial.parseInt() * 1000);
+          Can1.begin(parameters.can0Speed);
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+
+      case '9': //c for current setting in whole numbers
+        if (Serial.available() > 0)
+        {
+          parameters.can1Speed = long(Serial.parseInt() * 1000);
+
+          Can1.begin(parameters.can1Speed);
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+        /*
+      case 'c': //c for time
+        if (Serial.available() > 0)
+        {
+          rtc_clock.set_time(Serial.parseInt(), Serial.parseInt(), Serial.parseInt());
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+      case 'd': //c for time
+        if (Serial.available() > 0)
+        {
+          rtc_clock.set_date(Serial.parseInt(), Serial.parseInt(), Serial.parseInt());
+          menuload = 0;
+          incomingByte = 'd';
+        }
+        break;
+        */
+    }
+  }
+
+  if (menuload == 0)
+  {
+    switch (incomingByte)
+    {
+      case 's'://s for start AND stop
+        if (Serial.available() > 0)
+        {
+          setting = 1;
+          digitalWrite(LED_BUILTIN, HIGH);
+          if (Serial.parseInt() == 1)
+          {
+            if (state == 0)
+            {
+              state = 2;// initialize modules
+              tboot = millis();
+            }
+          }
+          if (Serial.parseInt() == 0)
+          {
+            if (state == 1)
+            {
+              state = 0;// initialize modules
+            }
+          }
+        }
+
+      case 'q': //q for quit
+        EEPROM.write(0, parameters);
+        debug = 1;
+        menuload = 0;
+        break;
+
+      case 'd'://d for display
+        debug = 0;
+        menuload = 1;
+        Serial.println();
+        Serial.println();
+        Serial.println();
+        Serial.println();
+        Serial.println("Settings Menu");
+        Serial.print("1 - Auto Enable : ");
+        if (parameters.autoEnableCharger == 1)
+        {
+          Serial.println("ON");
+        }
+        else
+        {
+          Serial.println("OFF");
+        }
+        Serial.print("2 - Modules Enabled : ");
+        Serial.println(parameters.enabledChargers);
+        Serial.print("3 - Can Mode : ");
+        if (parameters.canControl == 0)
+        {
+          Serial.println(" Off ");
+        }
+        if (parameters.canControl == 1)
+        {
+          Serial.println(" Master ");
+        }
+        if (parameters.canControl == 2)
+        {
+          Serial.println(" Master Elcon ");
+        }
+        if (parameters.canControl == 3)
+        {
+          Serial.println(" Slave ");
+        }
+        Serial.print("4 - Port Type : ");
+        Serial.println(parameters.type);
+        Serial.print("5 - Phase Wiring : ");
+        Serial.println(parameters.phaseconfig + 1);
+        Serial.print("6 - DC Charge Voltage : ");
+        Serial.print(parameters.voltSet * 0.01, 0);
+        Serial.println("V");
+        Serial.print("7 - AC Current Limit : ");
+        Serial.print(parameters.currReq / 1500);
+        Serial.println("A");
+        Serial.print("8 - CAN0 Speed : ");
+        Serial.println(parameters.can0Speed * 0.001, 0);
+        Serial.print("9 - CAN1 Speed : ");
+        Serial.println(parameters.can1Speed * 0.001, 0);
+        Serial.print("a - Can Debug : ");
+        if (candebug == 1)
+        {
+          Serial.println("ON");
+        }
+        else
+        {
+          Serial.println("OFF");
+        }
+        Serial.print("b - EVSE Debug : ");
+        if (evsedebug == 1)
+        {
+          Serial.println("ON");
+        }
+        else
+        {
+          Serial.println("OFF");
+        }
+        /*
+          Serial.print("c - time : ");
+          Serial.print(rtc_clock.get_hours());
+          Serial.print(":");
+          Serial.print(rtc_clock.get_minutes());
+          Serial.print(":");
+          Serial.println(rtc_clock.get_seconds());
+          Serial.print("d - date : ");
+          Serial.print(daynames[rtc_clock.get_day_of_week() - 1]);
+          Serial.print(": ");
+          Serial.print(rtc_clock.get_days());
+          Serial.print(".");
+          Serial.print(rtc_clock.get_months());
+          Serial.print(".");
+          Serial.println(rtc_clock.get_years());
+        */
+        Serial.println("q - To Quit Menu");
+        break;
+    }
+  }
+}
