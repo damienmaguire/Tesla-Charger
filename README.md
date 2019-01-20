@@ -41,11 +41,23 @@ Changed to a Vertical type B USB socket.
 
 
 -Stop sending power module can messages when charger not running - Working.
+
+
 -Correct reading of charger Fault and Enable feedback signals - Working.
+
+
 -Correct AC present flag so only sets if more than 70V AC is on each module - Working.
+
+
 -Reset charger on detection of power module fault - Testing.
+
+
 -Shutdown on exceeding a preset HV Battery voltage - Working. 
+
+
 -Evse read routine now in 500ms loop to prevent false triggering -Working.
+
+
 
 Recommend using this version.
 
