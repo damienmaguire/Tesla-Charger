@@ -541,21 +541,21 @@ autoShutdown();
 void resetFaults(){
 
 
-if ((bChargerEnabled == true) && (ACpres[0] == true) && (ModFlt[0] ==true))
+ if ((bChargerEnabled == true) && (ACpres[0] == true) && (ModFlt[0] ==true) && ((parameters.enabledChargers == 1) || (parameters.enabledChargers == 12) || (parameters.enabledChargers == 13) || (parameters.enabledChargers == 123)))
     {
       //if these conditions are met then phase one is enabled, has ac present and has entered a fault state so we want to reset.
             state = 0;
       digitalWrite(DIG_OUT_2, LOW); //disable AC present indication;
             digitalWrite(EVSE_ACTIVATE, LOW);
     }
- if ((bChargerEnabled == true) && (ACpres[1] == true) && (ModFlt[1] ==true))
+ if ((bChargerEnabled == true) && (ACpres[1] == true) && (ModFlt[1] ==true) && ((parameters.enabledChargers == 2) || (parameters.enabledChargers == 12) || (parameters.enabledChargers == 23) || (parameters.enabledChargers == 123)))
     {
       //if these conditions are met then phase two is enabled, has ac present and has entered a fault state so we want to reset.
             state = 0;
       digitalWrite(DIG_OUT_2, LOW); //disable AC present indication;
             digitalWrite(EVSE_ACTIVATE, LOW);
     }
- if ((bChargerEnabled == true) && (ACpres[2] == true) && (ModFlt[2] ==true))
+ if ((bChargerEnabled == true) && (ACpres[2] == true) && (ModFlt[2] ==true) && ((parameters.enabledChargers == 3) || (parameters.enabledChargers == 13) || (parameters.enabledChargers == 23) || (parameters.enabledChargers == 123)))
     {
       //if these conditions are met then phase three is enabled, has ac present and has entered a fault state so we want to reset.
             state = 0;
