@@ -61,4 +61,7 @@ Changed to a Vertical type B USB socket.
 
 Recommend using this version.
 
+27/01/19 : Added counter/timer to autoshutdown routine to prevent false triggering on transients.
+
+
 Enjoy!
