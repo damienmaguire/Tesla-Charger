@@ -14,6 +14,7 @@ D.Maguire 2019 Mods :
 -Reset charger on detection of power module fault - Testing.
 -Shutdown on exceeding a preset HV Battery voltage - Working. 
 -Evse read routine now in 500ms loop to prevent false triggering -Working.
+-Added counter/timer to autoshutdown to prevent false triggering on transients -Working.
 */
 
 #include <can_common.h>
@@ -110,6 +111,7 @@ int StatusID = 0x410;
 unsigned long ElconID = 0x18FF50E5;
 unsigned long ElconControlID = 0x1806E5F4;
 
+uint16_t LockOutCnt=0;// lockout counter
 
 int candebug = 0;
 int menuload = 0;
@@ -382,6 +384,7 @@ void loop()
   {
     tlast = millis();
     evseread();
+    autoShutdown();
     watchdogReset();
     if (debug != 0)
     {
@@ -494,11 +497,10 @@ void loop()
   DCcurrentlimit();
   ACcurrentlimit();
 
- 
+     resetFaults();
 
 
-resetFaults();
-autoShutdown();
+
 
 
 
@@ -541,26 +543,26 @@ autoShutdown();
 void resetFaults(){
 
 
- if ((bChargerEnabled == true) && (ACpres[0] == true) && (ModFlt[0] ==true) && ((parameters.enabledChargers == 1) || (parameters.enabledChargers == 12) || (parameters.enabledChargers == 13) || (parameters.enabledChargers == 123)))
+if ((bChargerEnabled == true) && (ACpres[0] == true) && (ModFlt[0] ==true) && ((parameters.enabledChargers == 1) || (parameters.enabledChargers == 12) || (parameters.enabledChargers == 13) || (parameters.enabledChargers == 123)))
     {
       //if these conditions are met then phase one is enabled, has ac present and has entered a fault state so we want to reset.
             state = 0;
       digitalWrite(DIG_OUT_2, LOW); //disable AC present indication;
-            digitalWrite(EVSE_ACTIVATE, LOW);
+          //  digitalWrite(EVSE_ACTIVATE, LOW);
     }
- if ((bChargerEnabled == true) && (ACpres[1] == true) && (ModFlt[1] ==true) && ((parameters.enabledChargers == 2) || (parameters.enabledChargers == 12) || (parameters.enabledChargers == 23) || (parameters.enabledChargers == 123)))
+  if ((bChargerEnabled == true) && (ACpres[1] == true) && (ModFlt[1] ==true) && ((parameters.enabledChargers == 2) || (parameters.enabledChargers == 12) || (parameters.enabledChargers == 23) || (parameters.enabledChargers == 123)))
     {
       //if these conditions are met then phase two is enabled, has ac present and has entered a fault state so we want to reset.
             state = 0;
       digitalWrite(DIG_OUT_2, LOW); //disable AC present indication;
-            digitalWrite(EVSE_ACTIVATE, LOW);
+            //digitalWrite(EVSE_ACTIVATE, LOW);
     }
  if ((bChargerEnabled == true) && (ACpres[2] == true) && (ModFlt[2] ==true) && ((parameters.enabledChargers == 3) || (parameters.enabledChargers == 13) || (parameters.enabledChargers == 23) || (parameters.enabledChargers == 123)))
     {
       //if these conditions are met then phase three is enabled, has ac present and has entered a fault state so we want to reset.
             state = 0;
       digitalWrite(DIG_OUT_2, LOW); //disable AC present indication;
-            digitalWrite(EVSE_ACTIVATE, LOW);
+            //digitalWrite(EVSE_ACTIVATE, LOW);
     }
       
   
@@ -578,14 +580,25 @@ void autoShutdown(){
   {
     if (dcvolt[0]>(parameters.tVolt*0.01)) //and if we exceed tVolt...
     {
-      LockOut=true; //lockout and shutdown
-      state=0;
+        LockOutCnt++; //increment the lockout counter
+//      LockOut=true; //lockout and shutdown
+  //    state=0;
   }
-
+  else
+  {
+    LockOutCnt=0; //other wise we reset the lockout counter
   }
-  if (Proximity == Unconnected) LockOut=false;  //re set the lockout flag when the evse plug is pulled
   
   }
+  if (Proximity == Unconnected) LockOut=false;  //re set the lockout flag when the evse plug is pulled
+
+  if (LockOutCnt>10)
+  {
+  state=0; //if we are above our shutdown targer for 10 consecutive counts we lockout
+  LockOut=true; //lockout and shutdown
+  LockOutCnt=0;
+  }
+}
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
