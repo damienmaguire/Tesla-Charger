@@ -15,6 +15,9 @@ D.Maguire 2019 Mods :
 -Shutdown on exceeding a preset HV Battery voltage - Working. 
 -Evse read routine now in 500ms loop to prevent false triggering -Working.
 -Added counter/timer to autoshutdown to prevent false triggering on transients -Working.
+-Added manual control mode for use of charger without EVSE. Digital one in when brought to +12v commands the charger to start
+and when brought low commands charger off. This mode also control HVDC via digital out 1 and AC mains via a contactor via Digital out 2.-Untested.
+
 */
 
 #include <can_common.h>
@@ -270,6 +273,7 @@ void loop()
       }
       digitalWrite(DIG_OUT_1, LOW);//HV OFF
       digitalWrite(EVSE_ACTIVATE, LOW);
+      digitalWrite(DIG_OUT_2, LOW);//AC OFF when in manual mode.
       digitalWrite(CHARGER1_ACTIVATE, LOW); //chargeph1 deactivate
       digitalWrite(CHARGER2_ACTIVATE, LOW); //chargeph2 deactivate
       digitalWrite(CHARGER3_ACTIVATE, LOW); //chargeph3 deactivate
@@ -327,6 +331,7 @@ void loop()
           delay(100);
           digitalWrite(DIG_OUT_1, HIGH);//HV ON
           digitalWrite(EVSE_ACTIVATE, HIGH); //evse on
+          digitalWrite(DIG_OUT_2, HIGH);//AC on in manual mode
         }
       }
       else
@@ -386,6 +391,7 @@ void loop()
     evseread();
     autoShutdown();
     watchdogReset();
+    manualMode();
     if (debug != 0)
     {
       Serial.println();
@@ -590,7 +596,7 @@ void autoShutdown(){
   }
   
   }
-  if (Proximity == Unconnected) LockOut=false;  //re set the lockout flag when the evse plug is pulled
+  if (Proximity == Unconnected&&(parameters.autoEnableCharger == 1)) LockOut=false;  //re set the lockout flag when the evse plug is pulled only if we are in evse mode.
 
   if (LockOutCnt>10)
   {
@@ -601,6 +607,45 @@ void autoShutdown(){
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///Manual control mode via Digital input 1. Special case for A.Rish.
+/////////////////////////////////////////////////////////////////////////////////////
+void manualMode()
+{
+
+  if (parameters.autoEnableCharger == 0)//if we are not in auto mode ...
+  {
+        if (state == 0)//....and if we are currently turned off....
+        {
+          if (digitalRead(DIG_IN_1) == HIGH&&(LockOut==false))//...and if digital one is high....
+          {
+            state = 2;// initialize modules. Fire up the charger.
+            tboot = millis();
+          }
+        }
+
+
+          
+          if (digitalRead(DIG_IN_1) == LOW)//...if brought low then we shutoff the charger.
+          {
+            state = 0;//
+            LockOut=false;//release lockout when dig 1 in is brought low.
+          }
+        
+      
+   
+
+  
+}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
 
 
 void candecode(CAN_FRAME & frame)
