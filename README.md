@@ -63,5 +63,12 @@ Recommend using this version.
 
 27/01/19 : Added counter/timer to autoshutdown routine to prevent false triggering on transients.
 
+06/02/19 : On request by a customer:
+
+Added manual control mode for use of charger without EVSE. Digital one in when brought to +12v commands the charger to start
+and when brought low commands charger off.
+
+This mode also control HVDC via digital out 1 and AC mains via a contactor via Digital out 2.-Untested as of this date.
+
 
 Enjoy!
