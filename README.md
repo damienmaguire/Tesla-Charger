@@ -70,5 +70,23 @@ and when brought low commands charger off.
 
 This mode also control HVDC via digital out 1 and AC mains via a contactor via Digital out 2.-Untested as of this date.
 
+19/06/19 : Added schematic for V4 logic board design. V4 has the following upgrades over V3 :
+
+-Changed from Type B USB to Mini. This will allow the charger lid to close without modification.
+
+-Added extra stage of filtering to proximity signal.
+
+-Single wire CAN capability added using the NCV7356. Now uses the exact same switching method between pwm control pilot and sw can as used in the Tesla charger / bms boards. This will allow use of Tesla destination charging, Chademo adapter,CCS adapter and possibly supercharging. All software dependent.
+
+-Added two high power DC low side contactor drivers for use with DC fast charge or as general outputs.
+
+-Added 3rd CAN channel based around the MCP2517 controller. Allows for high speed as well as FD Can. This extra can channel will allow the Tesla charger to act as a Chademo controller. Just add contactors and a hall current sensor.
+
+-Two extra filtered and protected 12v digital inputs. General use or chademo control.
+
+-One extra filtered and protected analog input. General use or hall current sensor for chademo control.
+
+Untested as of this date.
+
 
 Enjoy!
