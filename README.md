@@ -1,5 +1,12 @@
 # Tesla-Charger
-Reverse Engineering of the Tesla 10Kw charger and development of an open source control board
+Reverse Engineering of the Tesla 10Kw charger and development of an open source control board.
+
+PCB Files in DesignSpark 8 format.
+
+Fully built and tested boards and bare PCBs available here :
+http://www.evbmw.com/index.php/evbmw-webshop
+
+Support forum : https://openinverter.org/forum/
 
 19/10/17 : Uploaded two files : 
 ph_frames.csv this file contains the 3 messages required to run phase module 1 in the Gen 2 charger
