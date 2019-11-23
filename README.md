@@ -99,3 +99,5 @@ Untested as of this date.
 
 
 Enjoy!
+
+23/11/19 : Updated BOM for V4 with corrections.
