@@ -36,6 +36,8 @@ Added 2M Serial EEPROM for parameter storage
 
 Changed to a Vertical type B USB socket.
 
+
+23/11/19 : Updated BOM for V4 with corrections.
 27/02/18 : Error found on the V2 board. Missing grounds on Q1 and D5. Affects EVSE control only. Will ammend in a rev3 board asap.
 
 28/02/18 : V3 design files released with grounds fixed. Also new S/W thanks to Tom DeBree released but untested as of today. Also pictures of mod required on V1 and V2 boards.
