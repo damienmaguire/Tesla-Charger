@@ -101,3 +101,5 @@ Untested as of this date.
 Enjoy!
 
 23/11/19 : Updated BOM for V4 with corrections.
+
+21/01/2020 : New V5 design based on the STM32F103C8T6 now released. Note that as of today no firmware is developed. Anyone want to lend a hand?
