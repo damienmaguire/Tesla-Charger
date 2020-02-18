@@ -104,4 +104,4 @@ Enjoy!
 
 21/01/2020 : New V5 design based on the STM32F103C8T6 now released. Note that as of today no firmware is developed. Anyone want to lend a hand?
 
-18/02/20 : Beata firmware for the V5 board released. Untested as of this release due to hardware delay.
+18/02/20 : Beata firmware for the V5 board released. Untested as of this release due to hardware delay. Uses ST CUBEIDE.
