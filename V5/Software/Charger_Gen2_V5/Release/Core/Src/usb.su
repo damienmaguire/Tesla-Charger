@@ -1,0 +1,3 @@
+usb.c:31:6:MX_USB_PCD_Init	16	static
+usb.c:47:6:HAL_PCD_MspInit	8	static
+usb.c:63:6:HAL_PCD_MspDeInit	0	static

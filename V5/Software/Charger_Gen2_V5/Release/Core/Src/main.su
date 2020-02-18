@@ -1,0 +1,5 @@
+main.c:227:6:SystemClock_Config	96	static
+main.c:272:6:EEPROM_Read	24	static
+main.c:157:5:main	8	static
+main.c:292:6:EEPROM_Write	16	static
+main.c:317:6:Error_Handler	0	static
