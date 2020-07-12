@@ -107,3 +107,30 @@ Enjoy!
 18/02/20 : Beata firmware for the V5 board released. Untested as of this release due to hardware delay. Uses ST CUBEIDE.
 
 14.03/20 : ESP8266 based web interface for the V5 charger board using Olimex module. Firmware uploaded. Untested as of release. Bench tests on V5 hardware looking good. One software bug discovered.
+
+
+12/07/20 : 
+
+Update : V5 software debugging now done.
+
+-EEPROM saving of parameters now working.
+
+-Autoshutdown on exceeding termination voltage parameter now working. 
+
+-WiFi now working
+
+-Correct reporting of voltage and current values over wifi and serial
+
+-Robust reading of pilot pwm current setting. Was very noise prone.
+
+Still todo : 
+
+- Add support for the alternate CAN messaging in some chargers.
+
+Release :
+
+As stated previously due to the lack of engagement / support by the community I employed a developer to debug the firmware at some considerable financial cost and my own time in testing. As such the source for this and further updates will be available to Patrons on Patreon only as of now.
+https://www.patreon.com/evbmw
+
+This may change in the future. Binaries are freely available on Github and all boards bought from the EVBMW store will be shipped with this version.
+https://github.com/damienmaguire/Tesla-Charger/tree/master/V5/Software/Binary
