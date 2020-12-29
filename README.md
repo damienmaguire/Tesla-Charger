@@ -134,3 +134,6 @@ https://www.patreon.com/evbmw
 
 This may change in the future. Binaries are freely available on Github and all boards bought from the EVBMW store will be shipped with this version.
 https://github.com/damienmaguire/Tesla-Charger/tree/master/V5/Software/Binary
+
+
+29/12/20 : Added pdf schematics, board layout and Gerbers for the V5 Block 2 boards (latest release).
