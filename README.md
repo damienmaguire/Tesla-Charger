@@ -137,3 +137,7 @@ https://github.com/damienmaguire/Tesla-Charger/tree/master/V5/Software/Binary
 
 
 29/12/20 : Added pdf schematics, board layout and Gerbers for the V5 Block 2 boards (latest release).
+
+24/02/21 : Added pdf schematics, board layout and Gerbers for the V5 Block 3 boards (latest release). Some design improvements to take advantage of the new Openinverter based firmware :
+
+https://openinverter.org/wiki/GEN2
